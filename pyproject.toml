@@ -1,0 +1,75 @@
+[project]
+name = "gravai"
+version = "0.1.0"
+description = "GravAI - the AI agent layer for the Graviton lending platform, powered by Sarvam AI"
+requires-python = ">=3.12"
+dependencies = [
+    "gravai-core",
+    "gravai-sarvam",
+    "gravai-agents",
+    "gravai-connectors",
+    "gravai-evals",
+    "gravai-api",
+    "gravai-mcp",
+    "gravai-worker",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/api", "apps/mcp", "apps/worker"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-sarvam = { workspace = true }
+gravai-agents = { workspace = true }
+gravai-connectors = { workspace = true }
+gravai-runner = { workspace = true }
+gravai-workflow = { workspace = true }
+gravai-evals = { workspace = true }
+gravai-api = { workspace = true }
+gravai-mcp = { workspace = true }
+gravai-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.112",
+    "httpx>=0.27",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-python-dateutil",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+markers = [
+    "postgres: requires a live PostgreSQL instance (auto-skipped otherwise)",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["B008", "RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/", "tests/"]
+
+[tool.coverage.run]
+source = ["packages"]
+omit = ["*/tests/*", "*/__init__.py"]

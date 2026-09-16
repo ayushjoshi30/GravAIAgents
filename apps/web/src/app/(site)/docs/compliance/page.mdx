@@ -1,0 +1,104 @@
+export const metadata = {
+  title: "Compliance overview",
+  description:
+    "How GravAI implements RBI Digital Lending Directions, DPDP Act 2023, Account Aggregator requirements, Aadhaar masking, collections conduct and payment mandate rules.",
+};
+
+# Compliance overview
+
+This page describes implemented controls. It is not a legal opinion and it is not a
+certification. Regulatory text changes; verify the current text before a deployment and
+record the verification in `DECISIONS.md`.
+
+## RBI Digital Lending Directions
+
+- The Key Fact Statement is available to the onboarding agent and surfaced on request, in
+  the borrower's language.
+- Data minimisation: no contacts, no media access, no device scraping. The platform asks
+  for documents and consent, nothing else.
+- Consent is captured per purpose, not once at sign-up, and stored with its purpose, scope,
+  artefact and expiry.
+- Grievance officer details come from tenant configuration and are surfaced on request.
+- **No automated adverse action.** The Credit Appraisal agent always returns
+  `escalate: true` for the decision itself. A rejection is drafted, in plain language, and
+  waits for a human.
+- Cooling-off information is provided in the borrower's language.
+
+## DPDP Act 2023 and Rules
+
+- Consent notices carry a stated purpose and an expiry, held in a consent registry per
+  borrower.
+- Purpose limitation is enforced at the feature level: the segmentation agent may only use
+  features whose consent purpose covers marketing or servicing, and reports the excluded
+  count rather than quietly dropping people.
+- Data-principal request tooling covers access, erasure and correction, each with a
+  workflow and an audit trail.
+- Retention classes per table drive scheduled purge jobs; purge status is visible in the
+  console.
+- Breach notification has a runbook with a timeline.
+- Cross-border restriction: India regions only — Azure Central India and South India.
+
+## Account Aggregator (RBI NBFC-AA, ReBIT, Sahamati)
+
+- Consent artefacts are stored in ReBIT shapes with purpose, frequency and expiry.
+- Data is used only for the stated purpose and deleted on expiry.
+- Live rails only through a licensed AA or TSP. GravAI ships the interface and a sandbox
+  adapter, and the connector registry reports `external_dependency` so nobody can mistake
+  one for the other.
+
+## Aadhaar and UIDAI
+
+- Aadhaar is masked to the last four digits at the point of extraction.
+- The full value is never stored, never logged and never emitted by any agent. It cannot
+  be returned by the API because it is not held.
+- DigiLocker and offline e-KYC flows only.
+- The red-team suite asserts zero full-Aadhaar emissions across every agent.
+- Identity verification on a voice call uses date of birth or the last four digits of the
+  registered mobile. Never Aadhaar, in either direction.
+
+## Collections conduct
+
+- Calling window defaults to **08:00–19:00 IST**, configurable per tenant. The check runs
+  in the workflow before dialling, so a call outside the window is not placed rather than
+  placed and flagged.
+- DND and UCC registry checked before every outbound attempt.
+- The first turn discloses the lender, that the caller is an AI assistant, and that the
+  call is recorded. Speech analytics then scores that disclosure on every call.
+- No third-party disclosure of the debt, in any circumstance.
+- A harassment-language classifier blocks output before synthesis.
+- Three unanswered attempts in a day ends the day. A request not to be called is final.
+- Complaints are captured and routed to a human.
+
+Every business date and every calling window is evaluated in `Asia/Kolkata`, and timestamps
+are stored in UTC. `tzdata` is a hard dependency so the behaviour is identical on a Linux
+container and a Windows developer machine rather than "works in CI, fails on the laptop".
+
+## Payments — NPCI e-NACH and UPI AutoPay
+
+- Pre-debit notification at least 24 hours ahead of presentment.
+- Retry limits per tenant policy; an exhausted case is skipped with a reason, not retried.
+- Presentment amount never exceeds the registered mandate cap.
+- Presentment is scheduled 1 to 3 days after the salary-credit date detected from bank
+  statements, which is a recovery optimisation and a courtesy at the same time.
+
+## IT governance and model risk
+
+- Audit-log retention of at least 8 years, immutable, configurable.
+- Change management through CI gates; prompt promotion requires all eval gates green and
+  an approval.
+- Prompt and model versioning with hashed prompts and pinned model ids.
+- Scorecards are versioned with published feature weights and a calibration table; PSI is
+  computed monthly and the calibration plot is visible in the console.
+- Drift monitoring compares weekly production samples, human-labelled through the console,
+  against thresholds.
+- Adverse decisions are explainable with citations, and the decision trail prints as an
+  annexure to the memorandum.
+
+## Evidence on demand
+
+The audit explorer filters by tenant, actor, action, entity and time, shows the full event
+with before and after values and evidence hashes, and verifies the hash chain over a range.
+Export packs for RBI or internal audit carry a signed manifest.
+
+Per application, the decision trail shows every agent step, prompt version, citation, human
+action and timestamp, printable as an annexure to the Credit Appraisal Memorandum.

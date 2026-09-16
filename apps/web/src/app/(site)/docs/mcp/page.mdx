@@ -1,0 +1,114 @@
+export const metadata = {
+  title: "Connect over MCP",
+  description:
+    "Connect Claude or any Model Context Protocol host to GravAI: the OAuth 2.1 handshake, the tool catalog, role-scoped tool sets, resources and prompts.",
+};
+
+# Connect over MCP
+
+GravAI exposes a remote MCP server at `/mcp` over Streamable HTTP, acting as an OAuth 2.1
+resource server. Sessions are stateless-capable behind a load balancer, with resumability
+backed by a Redis event store.
+
+## Authentication
+
+The server publishes protected-resource metadata at
+`/.well-known/oauth-protected-resource`. A host discovers it, obtains a token from the
+identity provider, and presents it as a bearer token.
+
+Tokens are validated against the provider's JWKS with `audience = GravAI MCP`. A token
+without a tenant claim is rejected outright — there is no tenant-less request in GravAI.
+
+Client tokens are **never** forwarded to a downstream system. That is the confused-deputy
+mitigation and it is not configurable.
+
+## Adding GravAI to a host
+
+Claude Code:
+
+```bash
+claude mcp add --transport http gravai https://<your-host>/mcp
+```
+
+Claude on the web: add a custom connector pointing at `https://<your-host>/mcp` and
+complete the OAuth flow when prompted.
+
+A generic handshake, to check the server is reachable before wiring a host to it:
+
+```bash
+curl -sS https://<your-host>/.well-known/oauth-protected-resource | jq
+
+curl -sS https://<your-host>/mcp \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Tool sets are scoped by role
+
+The tool list a client sees is shaped by the scopes in its token. A collections client is
+never offered an underwriting tool — not hidden in the UI, absent from `tools/list`.
+
+| Profile | Scopes | Sees |
+|---|---|---|
+| Underwriter | `applications:read`, `documents:read`, `agents:run`, `decisions:approve` | Graviton reads, BRE, Doc AI, `underwrite_application`, `analyse_bank_statement`, `verify_kyc`, `score_risk` |
+| Collections manager | `collections:read`, `collections:write`, `agents:run` | `collections.*`, `allocate_cases`, `plan_mandates`, `run_collections_followup`, `analyse_call` |
+| Auditor | `applications:read`, `audit:read`, `usage:read` | Read-only Graviton, `ledger.query`, no agent tools |
+| Ops research | `usage:read`, `agents:run` | `ledger.query`, `run_ops_report` |
+
+## Systems as tools
+
+Read-only unless marked otherwise.
+
+- `graviton.get_application(application_id)`
+- `graviton.list_documents(application_id)`
+- `graviton.list_pendencies(application_id)`
+- `graviton.update_status(application_id, status, note)` — write
+- `bre.evaluate(application_id, policy_version?)`
+- `bre.explain(evaluation_id)`
+- `docai.extract(document_id, opts)` — write
+- `docai.digitise(document_id, opts)` — write
+- `docai.job_status(job_id)`
+- `risk.score_dpd(application_id | case_id)`
+- `kyc.verify(application_id)`
+- `aa.fetch_statement(consent_handle)` — sandbox only
+- `collections.list_cases(filters)`
+- `collections.get_case(case_id)`
+- `mandate.present(plan_id)` — write, destructive hint
+- `ledger.query(sql_template, params)` — templated, never raw SQL
+
+## Agents as tools
+
+Each returns `{ run_id, status, result? }`. A long run returns the run id immediately and
+streams progress notifications; the result is also readable as a resource.
+
+`underwrite_application` · `analyse_bank_statement` · `verify_kyc` · `score_risk` ·
+`allocate_cases` · `plan_mandates` · `run_collections_followup` · `analyse_call` ·
+`answer_borrower_query` · `run_ops_report`
+
+See the [agent reference](/docs/agent-reference) for the full tool name, scopes and
+guardrails of each.
+
+## Resources and prompts
+
+Resources: `application://{id}`, `document://{id}`, `run://{id}`, `report://{id}`.
+
+Prompts: `cam_review`, `collections_call_script`.
+
+## Every call is audited
+
+One row per tool call: tool name, hash of the arguments, tenant, subject, hash of the
+result, latency and the authorisation decision — in the same hash chain as everything else,
+and visible in the console's audit explorer filtered by actor type `mcp_client`.
+
+Tool schemas are versioned with `x-gravai-version`. A breaking change adds a new tool
+name; it never mutates an existing one, because a host that cached the old schema would
+otherwise start sending arguments that quietly mean something different.
+
+## Prompt injection
+
+Documents and tool results are data, never instructions. Text extracted from a borrower's
+uploaded document cannot direct an agent, because instruction content and data content are
+kept in separate turns and every agent output passes validators before it is accepted.
+Tools are allowlisted per agent, so even a successful injection has nothing to reach for.

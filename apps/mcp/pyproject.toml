@@ -1,0 +1,32 @@
+[project]
+name = "gravai-mcp"
+version = "0.1.0"
+description = "GravAI MCP server - a thin, audited adapter over the agent layer"
+requires-python = ">=3.12"
+dependencies = [
+    "gravai-core",
+    "gravai-agents",
+    "gravai-connectors",
+    "gravai-sarvam",
+    "gravai-runner",
+    "mcp>=1.2",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+
+[project.scripts]
+gravai-mcp = "gravai_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_mcp"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-agents = { workspace = true }
+gravai-connectors = { workspace = true }
+gravai-sarvam = { workspace = true }
+gravai-runner = { workspace = true }

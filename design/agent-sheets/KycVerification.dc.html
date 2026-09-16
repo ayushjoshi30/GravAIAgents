@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KYC Verification</title>
+<script src="./support.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#f7f9fc;color:#101828;font-family:"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size:13px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  font-feature-settings:"cv05" 1,"ss01" 1}
+.eyebrow{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#667085}
+.mono{font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-variant-numeric:tabular-nums}
+
+.sheet{width:960px;height:660px;background:#ffffff;padding:30px 32px;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid #e4e8ef}
+.brandline{display:flex;align-items:center;gap:8px}
+.brandline .wm{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#204887}
+.topright{display:flex;align-items:center;gap:12px}
+.domain{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  padding:3px 8px;border-radius:4px;background:#f4f7fc;color:#204887;border:1px solid #cfdcef}
+.idx{font-size:11px;font-weight:500;color:#667085;font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-variant-numeric:tabular-nums}
+.title{margin:18px 0 0;font-size:26px;font-weight:700;letter-spacing:-.022em;line-height:1.18;text-wrap:balance}
+.tagline{margin:7px 0 0;font-size:13px;color:#475467;max-width:78ch}
+.tracks{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:13px;margin-top:20px;flex:1;min-height:0}
+.track{min-width:0;border-radius:8px;overflow:hidden}
+.track.in{background:#f7f9fc;border:1px solid #e4e8ef;padding:13px 15px}
+.track.proc{background:#f4f7fc;border:1px solid #cfdcef;padding:13px 15px}
+.track.out{background:#ffffff;border:1px solid #a8bfe0;padding:0;
+  box-shadow:0 1px 3px 0 rgb(32 72 135 / 0.10)}
+.track.out .band{background:#204887;padding:9px 15px}
+.track.out .band .eyebrow,.track.out .band .n{color:#fff}
+.track.out .band .n{border-color:rgb(255 255 255 / 0.35);background:rgb(255 255 255 / 0.14)}
+.track.out .body{padding:12px 15px 13px}
+.th{display:flex;align-items:baseline;gap:7px;margin-bottom:12px}
+.track.out .band .th{margin-bottom:0}
+.th .n{font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-size:10px;font-weight:500;color:#204887;
+  border:1px solid #cfdcef;background:#f4f7fc;border-radius:3px;padding:0 4px;line-height:15px}
+.rows{display:flex;flex-direction:column;gap:9px}
+.row .k{font-size:10.5px;font-weight:500;color:#667085;letter-spacing:.01em}
+.row .v{font-size:12.5px;color:#101828;margin-top:1px;overflow-wrap:anywhere}
+.row .v.big{font-size:19px;font-weight:650;letter-spacing:-.018em;font-variant-numeric:tabular-nums;line-height:1.25}
+.row .v.pass{color:#027a48;font-weight:500}
+.row .v.amber{color:#b54708;font-weight:500}
+.row .v.fail{color:#b42318;font-weight:600}
+.row .cite{display:inline-block;font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-size:10px;color:#667085;
+  background:#eef1f6;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.steps{display:flex;flex-direction:column;gap:10px;border-left:2px solid #cfdcef;padding-left:14px}
+.step{font-size:12px;color:#475467;position:relative}
+.step::before{content:"";position:absolute;left:-19px;top:6px;width:6px;height:6px;
+  border-radius:50%;background:#204887;box-shadow:0 0 0 2px #ffffff}
+.foot{margin-top:18px;padding-top:15px;border-top:1px solid #e4e8ef;display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.figs{display:flex;gap:10px}
+.fig{background:#f4f7fc;border:1px solid #cfdcef;border-radius:7px;padding:8px 13px}
+.fig .fv{font-size:20px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15;color:#204887}
+.fig .fl{font-size:10px;font-weight:500;color:#667085;letter-spacing:.02em;margin-top:2px;white-space:nowrap}
+/* The rule at the head states the brand; the bar at the foot states the outcome. */
+.toprule{height:3px;background:#204887;margin:-30px -32px 18px}
+.verdictbar{height:4px;margin:14px -32px -30px}
+.verdictbar.clear{background:#027a48}
+.verdictbar.escalated{background:#b54708}
+.verdicts{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
+  padding:4px 10px;border-radius:999px;white-space:nowrap}
+.chip.pass{background:#ecfdf3;color:#027a48;border:1px solid #abefc6}
+.chip.amber{background:#fffaeb;color:#b54708;border:1px solid #fedf89}
+.chip .dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.note{margin-top:12px;font-size:11.5px;line-height:1.5;color:#475467;
+  border-left:2px solid #cfd6e0;padding-left:11px;max-width:96ch}
+
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="toprule"></div>
+  <div class="top">
+    <div class="brandline"><svg class="mark" width="20" height="20" viewBox="0 0 40 40" fill="#204887" aria-hidden="true"><g transform="translate(-16.1 -24.48) scale(2.2)"><path d="M17.304 26.1322C16.4117 26.1322 15.591 25.989 14.8419 25.7026C14.0927 25.4051 13.4428 24.992 12.892 24.4632C12.3411 23.9234 11.9115 23.2955 11.603 22.5794C11.2946 21.8633 11.1404 21.0757 11.1404 20.2164C11.1404 19.3571 11.2946 18.5694 11.603 17.8534C11.9115 17.1373 12.3411 16.5149 12.892 15.9861C13.4538 15.4463 14.1093 15.0332 14.8584 14.7468C15.6075 14.4493 16.4337 14.3006 17.3371 14.3006C18.2514 14.3006 19.0887 14.4493 19.8488 14.7468C20.6089 15.0442 21.2534 15.4904 21.7822 16.0852L20.7577 17.1098C20.284 16.6471 19.7662 16.3111 19.2044 16.1018C18.6535 15.8814 18.0531 15.7713 17.4032 15.7713C16.7422 15.7713 16.1253 15.8814 15.5524 16.1018C14.9906 16.3221 14.5004 16.6306 14.0817 17.0271C13.6741 17.4237 13.3547 17.8974 13.1233 18.4483C12.903 18.9881 12.7928 19.5774 12.7928 20.2164C12.7928 20.8443 12.903 21.4337 13.1233 21.9845C13.3547 22.5243 13.6741 22.998 14.0817 23.4056C14.5004 23.8022 14.9906 24.1107 15.5524 24.331C16.1143 24.5513 16.7257 24.6615 17.3867 24.6615C18.0036 24.6615 18.5929 24.5679 19.1548 24.3806C19.7276 24.1823 20.2564 23.8573 20.7411 23.4056L21.683 24.6615C21.1102 25.1462 20.4382 25.5153 19.667 25.7687C18.9069 26.011 18.1192 26.1322 17.304 26.1322ZM20.0967 24.4467V20.1503H21.683V24.6615L20.0967 24.4467Z"/></g></svg><span class="wm">GravAI</span></div>
+    <div class="topright">
+      <span class="domain">Lending intake</span>
+      <span class="idx">AGENT 04 / 14</span>
+    </div>
+  </div>
+
+  <h1 class="title">KYC Verification</h1>
+  <p class="tagline">Cross-checks the application against an issuing source and reports where the two disagree.</p>
+
+  <div class="tracks">
+    <div class="track in">
+      <div class="th"><span class="n">1</span><span class="eyebrow">What goes in</span></div>
+      <div class="rows"><div class="row"><div class="k">Application</div><div class="v">18302</div></div><div class="row"><div class="k">Source</div><div class="v">DigiLocker</div></div><div class="row"><div class="k">Declared name</div><div class="v">Ayush Joshi</div></div><div class="row"><div class="k">Declared date of birth</div><div class="v">02/11/1991</div></div></div>
+    </div>
+    <div class="track proc">
+      <div class="th"><span class="n">2</span><span class="eyebrow">What it does</span></div>
+      <div class="steps"><div class="step">Normalise names past honorifics and ordering</div><div class="step">Compare each field and score the agreement</div><div class="step">Reduce Aadhaar to its last four digits before anything is stored</div><div class="step">Report per-field, never as a single opaque verdict</div></div>
+    </div>
+    <div class="track out">
+      <div class="band">
+        <div class="th"><span class="n">3</span><span class="eyebrow">What comes out</span></div>
+      </div>
+      <div class="body">
+        <div class="rows"><div class="row"><div class="k">Verified</div><div class="v pass">true</div></div><div class="row"><div class="k">Checks agreeing</div><div class="v pass">4 of 4</div></div><div class="row"><div class="k">name</div><div class="v">exact · 1.0</div></div><div class="row"><div class="k">date_of_birth</div><div class="v">exact · 1.0</div></div><div class="row"><div class="k">aadhaar_last4</div><div class="v">9017</div></div><div class="row"><div class="k">pan</div><div class="v">AXKPJ8891L · individual</div></div><div class="row"><div class="k">Overall score</div><div class="v big">1.0</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="figs">
+      <div class="fig"><div class="fv">4/4</div><div class="fl">checks agree</div></div><div class="fig"><div class="fv">1.0</div><div class="fl">overall score</div></div><div class="fig"><div class="fv">0</div><div class="fl">identifiers stored in full</div></div><div class="fig"><div class="fv">₹0.00</div><div class="fl">model cost</div></div>
+    </div>
+    <div class="verdicts">
+      <span class="chip pass"><span class="dot"></span>Cleared — identity verified</span>
+      <span class="chip pass"><span class="dot"></span>Guardrails passed</span>
+    </div>
+  </div>
+  <p class="note">Aadhaar is handled as last four digits only, at every stage. A full identifier appearing in any output is a guardrail violation, not a display choice.</p>
+  <div class="verdictbar clear"></div>
+</div>
+</body>
+</html>

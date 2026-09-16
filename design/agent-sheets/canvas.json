@@ -1,0 +1,127 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 1460,
+      "y": 0,
+      "w": 1280,
+      "h": 960,
+      "title": "Overview"
+    },
+    {
+      "file": "DocumentIntelligence.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 960,
+      "h": 660,
+      "title": "Document Intelligence"
+    },
+    {
+      "file": "BankStatementAnalytics.dc.html",
+      "x": 1080,
+      "y": 1120,
+      "w": 960,
+      "h": 660,
+      "title": "Bank Statement Analytics"
+    },
+    {
+      "file": "AccountAggregator.dc.html",
+      "x": 2160,
+      "y": 1120,
+      "w": 960,
+      "h": 660,
+      "title": "Account Aggregator"
+    },
+    {
+      "file": "KycVerification.dc.html",
+      "x": 3240,
+      "y": 1120,
+      "w": 960,
+      "h": 660,
+      "title": "KYC Verification"
+    },
+    {
+      "file": "CreditAppraisal.dc.html",
+      "x": 0,
+      "y": 1940,
+      "w": 960,
+      "h": 660,
+      "title": "Credit Appraisal"
+    },
+    {
+      "file": "RiskScoring.dc.html",
+      "x": 1080,
+      "y": 1940,
+      "w": 960,
+      "h": 660,
+      "title": "Risk Scoring"
+    },
+    {
+      "file": "MsmeUnderwriting.dc.html",
+      "x": 2160,
+      "y": 1940,
+      "w": 960,
+      "h": 660,
+      "title": "MSME Underwriting"
+    },
+    {
+      "file": "OnboardingAssistant.dc.html",
+      "x": 3240,
+      "y": 1940,
+      "w": 960,
+      "h": 660,
+      "title": "Onboarding Assistant"
+    },
+    {
+      "file": "CaseAllocation.dc.html",
+      "x": 0,
+      "y": 2760,
+      "w": 960,
+      "h": 660,
+      "title": "Case Allocation"
+    },
+    {
+      "file": "SmartMandate.dc.html",
+      "x": 1080,
+      "y": 2760,
+      "w": 960,
+      "h": 660,
+      "title": "Smart Mandate"
+    },
+    {
+      "file": "VoiceCollections.dc.html",
+      "x": 2160,
+      "y": 2760,
+      "w": 960,
+      "h": 660,
+      "title": "Voice Collections"
+    },
+    {
+      "file": "SpeechAnalytics.dc.html",
+      "x": 3240,
+      "y": 2760,
+      "w": 960,
+      "h": 660,
+      "title": "Speech Analytics"
+    },
+    {
+      "file": "CustomerIntelligence.dc.html",
+      "x": 1080,
+      "y": 3580,
+      "w": 960,
+      "h": 660,
+      "title": "Customer Intelligence"
+    },
+    {
+      "file": "OpsResearch.dc.html",
+      "x": 2160,
+      "y": 3580,
+      "w": 960,
+      "h": 660,
+      "title": "Operations Research"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

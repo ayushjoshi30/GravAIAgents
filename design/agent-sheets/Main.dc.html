@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Capability Sheets</title>
+<script src="./support.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#f7f9fc;color:#101828;font-family:"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size:13px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  font-feature-settings:"cv05" 1,"ss01" 1}
+.eyebrow{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#667085}
+.mono{font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-variant-numeric:tabular-nums}
+
+.board{width:1280px;height:960px;background:#ffffff;padding:38px 40px;display:flex;flex-direction:column}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:32px;
+  padding-bottom:20px;border-bottom:1px solid #e4e8ef}
+.brandline{display:flex;align-items:center;gap:9px;margin-bottom:16px}
+.brandline .wm{font-size:15px;font-weight:700;letter-spacing:-.01em;color:#204887}
+h1{margin:0;font-size:34px;font-weight:700;letter-spacing:-.025em;line-height:1.14}
+.sub{margin:9px 0 0;font-size:14px;color:#475467;max-width:64ch}
+.counts{display:flex;gap:26px;flex:0 0 auto;padding-top:4px}
+.count .cv{font-size:26px;font-weight:650;letter-spacing:-.02em;color:#204887;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.count .cl{font-size:10px;font-weight:500;color:#667085;letter-spacing:.03em;margin-top:2px}
+.prov{margin:18px 0 0;display:flex;gap:10px;align-items:flex-start;background:#f4f7fc;
+  border:1px solid #cfdcef;border-radius:8px;padding:11px 14px;font-size:12px;color:#475467}
+.prov strong{color:#204887;font-weight:600}
+.groups{margin-top:20px;display:flex;flex-direction:column;gap:16px;flex:1;min-height:0}
+.group{display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start}
+.glabel{padding-top:9px}
+.glabel .gt{font-size:12px;font-weight:600;color:#101828;letter-spacing:-.005em}
+.glabel .gc{font-size:10.5px;color:#667085;margin-top:2px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tile{background:#ffffff;border:1px solid #e4e8ef;border-radius:8px;padding:12px 13px;
+  box-shadow:0 1px 2px 0 rgb(16 24 40 / 0.05);display:flex;flex-direction:column;gap:6px;min-height:0}
+.tile .tn{font-size:13px;font-weight:600;letter-spacing:-.008em;line-height:1.25}
+.tile .td{font-size:11px;line-height:1.45;color:#667085;flex:1}
+.tile .tf{display:flex;align-items:baseline;gap:6px;padding-top:7px;border-top:1px solid #e4e8ef}
+.tile .tv{font-size:15px;font-weight:650;letter-spacing:-.016em;color:#204887;font-variant-numeric:tabular-nums}
+.tile .tl{font-size:10px;color:#667085}
+.tile.esc{border-left:3px solid #fedf89}
+.legend{margin-top:18px;padding-top:15px;border-top:1px solid #e4e8ef;
+  display:flex;justify-content:space-between;align-items:center;gap:28px}
+.keys{display:flex;gap:22px;flex-wrap:wrap}
+.key{display:flex;align-items:center;gap:7px;font-size:11px;color:#475467}
+.key .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+.stamp{font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;font-size:10.5px;color:#667085;white-space:nowrap}
+
+</style>
+</head>
+<body>
+<div class="board">
+  <div>
+    <div class="brandline"><svg class="mark" width="22" height="22" viewBox="0 0 40 40" fill="#204887" aria-hidden="true"><g transform="translate(-16.1 -24.48) scale(2.2)"><path d="M17.304 26.1322C16.4117 26.1322 15.591 25.989 14.8419 25.7026C14.0927 25.4051 13.4428 24.992 12.892 24.4632C12.3411 23.9234 11.9115 23.2955 11.603 22.5794C11.2946 21.8633 11.1404 21.0757 11.1404 20.2164C11.1404 19.3571 11.2946 18.5694 11.603 17.8534C11.9115 17.1373 12.3411 16.5149 12.892 15.9861C13.4538 15.4463 14.1093 15.0332 14.8584 14.7468C15.6075 14.4493 16.4337 14.3006 17.3371 14.3006C18.2514 14.3006 19.0887 14.4493 19.8488 14.7468C20.6089 15.0442 21.2534 15.4904 21.7822 16.0852L20.7577 17.1098C20.284 16.6471 19.7662 16.3111 19.2044 16.1018C18.6535 15.8814 18.0531 15.7713 17.4032 15.7713C16.7422 15.7713 16.1253 15.8814 15.5524 16.1018C14.9906 16.3221 14.5004 16.6306 14.0817 17.0271C13.6741 17.4237 13.3547 17.8974 13.1233 18.4483C12.903 18.9881 12.7928 19.5774 12.7928 20.2164C12.7928 20.8443 12.903 21.4337 13.1233 21.9845C13.3547 22.5243 13.6741 22.998 14.0817 23.4056C14.5004 23.8022 14.9906 24.1107 15.5524 24.331C16.1143 24.5513 16.7257 24.6615 17.3867 24.6615C18.0036 24.6615 18.5929 24.5679 19.1548 24.3806C19.7276 24.1823 20.2564 23.8573 20.7411 23.4056L21.683 24.6615C21.1102 25.1462 20.4382 25.5153 19.667 25.7687C18.9069 26.011 18.1192 26.1322 17.304 26.1322ZM20.0967 24.4467V20.1503H21.683V24.6615L20.0967 24.4467Z"/></g></svg><span class="wm">GravAI</span></div>
+    <div class="top">
+      <div>
+        <h1>Agent capability sheets</h1>
+        <p class="sub">One sheet per agent: what goes in, what it does with it, and what comes out — with the measured figures from an actual run rather than an illustration of one.</p>
+      </div>
+      <div class="counts">
+        <div class="count"><div class="cv">14</div><div class="cl">AGENTS</div></div>
+        <div class="count"><div class="cv">14</div><div class="cl">GUARDRAILS PASSED</div></div>
+        <div class="count"><div class="cv">4</div><div class="cl">ESCALATED BY DESIGN</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prov"><svg class="mark" width="15" height="15" viewBox="0 0 40 40" fill="#204887" aria-hidden="true"><g transform="translate(-16.1 -24.48) scale(2.2)"><path d="M17.304 26.1322C16.4117 26.1322 15.591 25.989 14.8419 25.7026C14.0927 25.4051 13.4428 24.992 12.892 24.4632C12.3411 23.9234 11.9115 23.2955 11.603 22.5794C11.2946 21.8633 11.1404 21.0757 11.1404 20.2164C11.1404 19.3571 11.2946 18.5694 11.603 17.8534C11.9115 17.1373 12.3411 16.5149 12.892 15.9861C13.4538 15.4463 14.1093 15.0332 14.8584 14.7468C15.6075 14.4493 16.4337 14.3006 17.3371 14.3006C18.2514 14.3006 19.0887 14.4493 19.8488 14.7468C20.6089 15.0442 21.2534 15.4904 21.7822 16.0852L20.7577 17.1098C20.284 16.6471 19.7662 16.3111 19.2044 16.1018C18.6535 15.8814 18.0531 15.7713 17.4032 15.7713C16.7422 15.7713 16.1253 15.8814 15.5524 16.1018C14.9906 16.3221 14.5004 16.6306 14.0817 17.0271C13.6741 17.4237 13.3547 17.8974 13.1233 18.4483C12.903 18.9881 12.7928 19.5774 12.7928 20.2164C12.7928 20.8443 12.903 21.4337 13.1233 21.9845C13.3547 22.5243 13.6741 22.998 14.0817 23.4056C14.5004 23.8022 14.9906 24.1107 15.5524 24.331C16.1143 24.5513 16.7257 24.6615 17.3867 24.6615C18.0036 24.6615 18.5929 24.5679 19.1548 24.3806C19.7276 24.1823 20.2564 23.8573 20.7411 23.4056L21.683 24.6615C21.1102 25.1462 20.4382 25.5153 19.667 25.7687C18.9069 26.011 18.1192 26.1322 17.304 26.1322ZM20.0967 24.4467V20.1503H21.683V24.6615L20.0967 24.4467Z"/></g></svg><div><strong>How to read these.</strong> Every figure was produced by running the agent against the sandbox and capturing its output, so a sheet cannot drift from the agent it describes. Four agents escalate rather than decide — that is the designed behaviour, not a failure.</div></div>
+
+  <div class="groups"><div class="group">
+        <div class="glabel"><div class="gt">Lending intake</div><div class="gc">4 agents</div></div>
+        <div class="tiles"><div class="tile">
+            <div class="tn">Document Intelligence</div>
+            <div class="td">Classifies every file in an application, routes it to the right reader, and returns each field with the page it came from.</div>
+            <div class="tf"><span class="tv">98</span><span class="tl">calls · 29 pages</span></div>
+          </div><div class="tile">
+            <div class="tn">Bank Statement Analytics</div>
+            <div class="td">Turns a statement into an income basis, an obligation schedule and a reconciliation that either balances or does not.</div>
+            <div class="tf"><span class="tv">₹85,000</span><span class="tl">verified income</span></div>
+          </div><div class="tile esc">
+            <div class="tn">Account Aggregator</div>
+            <div class="td">Fetches bank data under a consent artefact, enforces purpose and retention, and skips document reading entirely.</div>
+            <div class="tf"><span class="tv">24</span><span class="tl">doc calls avoided</span></div>
+          </div><div class="tile">
+            <div class="tn">KYC Verification</div>
+            <div class="td">Cross-checks the application against an issuing source and reports where the two disagree.</div>
+            <div class="tf"><span class="tv">4/4</span><span class="tl">checks agree</span></div>
+          </div></div>
+      </div><div class="group">
+        <div class="glabel"><div class="gt">Credit decision</div><div class="gc">4 agents</div></div>
+        <div class="tiles"><div class="tile esc">
+            <div class="tn">Credit Appraisal</div>
+            <div class="td">Builds the credit memorandum: eligibility arithmetic, rule-by-rule policy evaluation, and a recommendation a human signs.</div>
+            <div class="tf"><span class="tv">39.7%</span><span class="tl">FOIR · 5 rules</span></div>
+          </div><div class="tile">
+            <div class="tn">Risk Scoring</div>
+            <div class="td">Returns a default probability from a versioned scorecard, with the drivers that moved it and the features that were missing.</div>
+            <div class="tf"><span class="tv">6.58%</span><span class="tl">AMBER band</span></div>
+          </div><div class="tile">
+            <div class="tn">MSME Underwriting</div>
+            <div class="td">Cross-verifies declared turnover against GST filings and bank credits, then underwrites the most conservative of the three.</div>
+            <div class="tf"><span class="tv">₹58,00,000</span><span class="tl">assessed turnover</span></div>
+          </div><div class="tile">
+            <div class="tn">Onboarding Assistant</div>
+            <div class="td">Answers an applicant's question from their actual file, and hands off rather than guessing when it cannot.</div>
+            <div class="tf"><span class="tv">2</span><span class="tl">pendencies surfaced</span></div>
+          </div></div>
+      </div><div class="group">
+        <div class="glabel"><div class="gt">Collections</div><div class="gc">4 agents</div></div>
+        <div class="tiles"><div class="tile esc">
+            <div class="tn">Case Allocation</div>
+            <div class="td">Ranks a delinquent portfolio, suppresses the cases that must not be contacted, and says which need a person.</div>
+            <div class="tf"><span class="tv">3 of 5</span><span class="tl">suppressed</span></div>
+          </div><div class="tile">
+            <div class="tn">Smart Mandate</div>
+            <div class="td">Plans when to present a mandate so it lands after salary, with the pre-debit notice the rules require.</div>
+            <div class="tf"><span class="tv">₹35,952</span><span class="tl">planned, 24h notice</span></div>
+          </div><div class="tile">
+            <div class="tn">Voice Collections</div>
+            <div class="td">Runs a collections call within the conduct rules, blocking any line that would breach them before it is spoken.</div>
+            <div class="tf"><span class="tv">5/5</span><span class="tl">lines cleared</span></div>
+          </div><div class="tile">
+            <div class="tn">Speech Analytics</div>
+            <div class="td">Scores a call against a published rubric and drops any quote it cannot find in the transcript.</div>
+            <div class="tf"><span class="tv">83.3%</span><span class="tl">call score</span></div>
+          </div></div>
+      </div><div class="group">
+        <div class="glabel"><div class="gt">Portfolio &amp; operations</div><div class="gc">2 agents</div></div>
+        <div class="tiles"><div class="tile">
+            <div class="tn">Customer Intelligence</div>
+            <div class="td">Segments a book against published rules, and excludes anyone whose consent does not cover the purpose.</div>
+            <div class="tf"><span class="tv">6 of 9</span><span class="tl">consent-eligible</span></div>
+          </div><div class="tile esc">
+            <div class="tn">Operations Research</div>
+            <div class="td">Models what the document pipeline actually costs in requests, and whether the ceiling can absorb the volume.</div>
+            <div class="tf"><span class="tv">919,570</span><span class="tl">calls modelled</span></div>
+          </div></div>
+      </div></div>
+
+  <div class="legend">
+    <div class="keys">
+      <div class="key"><span class="sw" style="background:#ecfdf3;border:1px solid #abefc6"></span>Cleared — completed without escalation</div>
+      <div class="key"><span class="sw" style="background:#fffaeb;border:1px solid #fedf89"></span>Escalated — routed to a person by design</div>
+      <div class="key"><span class="sw" style="background:#f4f7fc;border:1px solid #cfdcef"></span>Cited — value bound to a document and page</div>
+    </div>
+    <div class="stamp">sandbox run · tenant acme · scorecard-v1-illustrative</div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+[project]
+name = "gravai-workflow"
+version = "0.1.0"
+description = "Agent Studio: node registry, workflow state, context compiler and the execution engine"
+requires-python = ">=3.12"
+dependencies = [
+    "gravai-core",
+    "gravai-agents",
+    "gravai-connectors",
+    "gravai-runner",
+    "gravai-sarvam",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_workflow"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-agents = { workspace = true }
+gravai-connectors = { workspace = true }
+gravai-runner = { workspace = true }
+gravai-sarvam = { workspace = true }

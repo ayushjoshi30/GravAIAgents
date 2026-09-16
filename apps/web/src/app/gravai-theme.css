@@ -1,0 +1,331 @@
+/* GravAI console design system — the layer from the redesign handoff.
+   Imported by globals.css immediately after `@import "tailwindcss";`.
+
+   ADDITIVE ON PURPOSE. The handoff ships its own palette, and several of its
+   token names already exist here with a different meaning — most sharply
+   `surface`, which is a recessed grey in the handoff and white in this
+   codebase. Overwriting them would restyle the thirty-odd screens the handoff
+   does not cover, on markup written against the old meanings, which is how a
+   redesign of six screens turns into a regression everywhere else.
+
+   So nothing here redefines an existing name. What it adds:
+     · the navy and teal families, which the handoff introduces
+     · `ink-4` and `line-2`, the two extra steps its components reach for
+     · both state vocabularies — `ok/warn/bad` AND `green/amber/red` — because
+       the package's components genuinely use both (its two theme files
+       disagreed, and the components were written against each in turn)
+     · the component classes the handoff needs and this codebase lacks
+
+   The one thing it does change globally is the typeface, which is the
+   redesign's largest visual move and the one the brief is explicit about.
+
+   The brand navy is #204887 in both systems, which is why the two sit together
+   without a clash: the redesign was drawn on this product's own blue. */
+
+@theme inline {
+  /* Type. The only global override in this file. */
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
+  --font-display: var(--font-archivo), var(--font-instrument), sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
+
+  /* Navy: the platform, the primary action, a completed node, a human gate. */
+  --color-navy: #204887;
+  --color-navy-ink: #16213f;
+  --color-navy-mid: #3b62a8;
+  --color-navy-line: #c9d6ec;
+  --color-navy-tint: #eef2f9;
+
+  /* Teal: the AI. A running node, a live edge, a model actor. Reserved —
+     if teal appears, something is thinking or something was thought. */
+  --color-teal: #0c6b5f;
+  --color-teal-ink: #0a5449;
+  --color-teal-tint: #e6f2f0;
+
+  /* Two steps the handoff adds to the neutral ramp. `ink-4` is the quietest
+     readable grey; `line-2` is the hairline this codebase already calls
+     `line`, named again so the handoff components resolve. */
+  --color-ink-4: #8c94a6;
+  --color-line-2: #e4e8ef;
+
+  /* State, in both spellings. `ok/warn/bad` reads as a verdict and
+     `green/amber/red` as a colour; the handoff's components use each in
+     different files, so both resolve to the same three pairs. */
+  --color-ok: #1f7a4d;
+  --color-ok-ink: #145c3a;
+  --color-ok-tint: #e6f4ec;
+  --color-warn: #9a6510;
+  --color-warn-ink: #7a4f0b;
+  --color-warn-tint: #fdf3df;
+  --color-bad: #b3261e;
+  --color-bad-ink: #8f1d17;
+  --color-bad-tint: #fbe9e7;
+
+  --color-green: #1f7a4d;
+  --color-green-ink: #145c3a;
+  --color-green-tint: #e6f4ec;
+  --color-amber-ink: #7a4f0b;
+  --color-amber-tint: #fdf3df;
+  --color-red: #b3261e;
+  --color-red-ink: #8f1d17;
+  --color-red-tint: #fbe9e7;
+
+  --animate-dash: gv-dash 0.6s linear infinite;
+  --animate-pulse-dot: gv-pulse 1.2s ease-in-out infinite;
+}
+
+:root {
+  --gv-radius-control: 4px;
+  --gv-radius-node: 6px;
+  --gv-radius-panel: 8px;
+  --gv-shadow-overlay: 0 8px 24px rgba(20, 26, 36, 0.14), 0 0 0 1px rgba(20, 26, 36, 0.06);
+}
+
+@layer components {
+  /* --- Type -------------------------------------------------------------
+     `gv-display`, `gv-eyebrow` and `gv-figure` already exist in globals.css
+     and are left alone. These two are new. */
+  .gv-page-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(26px, 3vw, 32px);
+    line-height: 1.1;
+  }
+  .gv-id {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* --- Surfaces --------------------------------------------------------- */
+  .gv-overlay {
+    background: #fff;
+    border-radius: var(--gv-radius-panel);
+    box-shadow: var(--gv-shadow-overlay);
+  }
+  .gv-row {
+    min-height: 44px;
+    border-top: 1px solid var(--color-line-2);
+  }
+  .gv-row:hover {
+    background: var(--color-surface-2);
+  }
+
+  /* --- Inputs ----------------------------------------------------------- */
+  .gv-input {
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--gv-radius-node);
+    background: #fff;
+    color: var(--color-ink);
+    font-size: 14px;
+    width: 100%;
+  }
+  .gv-input:focus {
+    border-color: var(--color-navy);
+    outline: 2px solid var(--color-navy-line);
+    outline-offset: 0;
+  }
+  .gv-textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--gv-radius-node);
+    font-size: 14px;
+    line-height: 1.5;
+    width: 100%;
+    resize: vertical;
+  }
+
+  /* --- Chips ------------------------------------------------------------
+     A state colour appears only on a chip, a dot, a bar or a node border.
+     Never on a surface, never on body text. */
+  .gv-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .gv-chip-navy { background: var(--color-navy-tint); color: var(--color-navy-ink); }
+  .gv-chip-slate { background: var(--color-surface-3); color: var(--color-ink-2); }
+  .gv-chip-teal { background: var(--color-teal-tint); color: var(--color-teal-ink); }
+  .gv-chip-green { background: var(--color-green-tint); color: var(--color-green-ink); }
+  .gv-chip-amber { background: var(--color-amber-tint); color: var(--color-amber-ink); }
+  .gv-chip-red { background: var(--color-red-tint); color: var(--color-red-ink); }
+  .gv-chip-outline { border: 1px solid var(--color-line-strong); color: var(--color-ink-2); }
+
+  /* Severity is deliberately outlined rather than filled: three filled chips
+     in a row read as three alarms, when only L3 is one. */
+  .gv-chip-sev-L1 {
+    border: 1px solid var(--color-line-strong);
+    color: var(--color-ink-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 7px;
+  }
+  .gv-chip-sev-L2 {
+    border: 1px solid var(--color-warn);
+    color: var(--color-warn-ink);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 7px;
+  }
+  .gv-chip-sev-L3 {
+    border: 1px solid var(--color-bad);
+    color: var(--color-bad-ink);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 7px;
+  }
+
+  /* --- Dots -------------------------------------------------------------- */
+  .gv-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+    display: inline-block;
+  }
+  .gv-dot-live {
+    background: var(--color-teal);
+    animation: gv-pulse 1.2s ease-in-out infinite;
+  }
+
+  /* --- Graph nodes, shared by the run graph and the Studio canvas -------- */
+  .gv-node {
+    position: relative;
+    background: #fff;
+    border: 1.5px solid var(--color-line-strong);
+    border-radius: var(--gv-radius-node);
+    text-align: left;
+    color: var(--color-ink);
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s,
+      opacity 0.3s;
+  }
+  .gv-node:hover { border-color: var(--color-navy); }
+  .gv-node-selected { border-color: var(--color-navy); box-shadow: 0 0 0 3px var(--color-navy-tint); }
+  .gv-node-running { border-color: var(--color-teal); box-shadow: 0 0 0 3px var(--color-teal-tint); }
+  .gv-node-failed { border-color: var(--color-bad); }
+  .gv-node-queued { border-style: dashed; border-color: var(--color-ink-4); opacity: 0.55; }
+  .gv-node-skipped { opacity: 0.5; }
+  .gv-node-gate { background: var(--color-navy-tint); border-color: var(--color-navy); color: var(--color-navy-ink); }
+  .gv-handle {
+    width: 12px !important;
+    height: 12px !important;
+    background: var(--color-navy) !important;
+    border: 2px solid #fff !important;
+  }
+
+  /* --- Edges ------------------------------------------------------------- */
+  .gv-edge { stroke: var(--color-navy); stroke-width: 1.5; fill: none; }
+  .gv-edge-queued { stroke: var(--color-line-strong); stroke-dasharray: 3 5; }
+  .gv-edge-live {
+    stroke: var(--color-teal);
+    stroke-dasharray: 6 8;
+    animation: gv-dash 0.6s linear infinite;
+  }
+
+  /* --- The agent pipeline explainer --------------------------------------
+     One cycle, 6s, shared by every part so the packet, the stage that lights
+     and the output that appears all describe the same imaginary run. Each
+     stage differs only by `animation-delay`, which is what lets the lit window
+     walk the rail without a JavaScript timer ticking on fourteen cards. */
+  .gv-stage {
+    animation: gv-stage-lit 6s ease-in-out infinite;
+  }
+  .gv-packet {
+    animation: gv-packet 6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .gv-emit {
+    animation: gv-emit 6s ease-out infinite;
+  }
+
+  /* --- Loading -----------------------------------------------------------
+     A block the shape of the thing that is coming, not a sentence saying it
+     is coming: the layout does not jump when the data lands. */
+  .gv-skeleton {
+    border-radius: 4px;
+    background: linear-gradient(90deg, #eef0f4 25%, #e4e8ef 50%, #eef0f4 75%);
+    background-size: 200% 100%;
+    animation: gv-shimmer 1.4s linear infinite;
+  }
+  .gv-rise { animation: gv-rise 0.2s ease-out; }
+}
+
+@keyframes gv-dash {
+  to { stroke-dashoffset: -14; }
+}
+@keyframes gv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes gv-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes gv-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A stage is lit for a sixth of the cycle and quiet for the rest, so at any
+   moment one stage is working and the others are plainly waiting — which is
+   what a pipeline actually looks like. */
+@keyframes gv-stage-lit {
+  0%, 12%, 100% {
+    border-color: var(--color-line-2);
+    box-shadow: none;
+  }
+  3%, 9% {
+    border-color: var(--color-teal);
+    box-shadow: 0 0 0 3px var(--color-teal-tint);
+  }
+}
+
+@keyframes gv-packet {
+  0% { left: 0; opacity: 0; }
+  6% { opacity: 1; }
+  60% { left: 100%; opacity: 1; }
+  66%, 100% { left: 100%; opacity: 0; }
+}
+
+/* Outputs do not exist until the run reaches them. Fading them in at the end
+   of the cycle is the difference between a diagram of a pipeline and a diagram
+   of a pipeline running. */
+@keyframes gv-emit {
+  0%, 60% { opacity: 0.25; transform: translateY(2px); }
+  70%, 96% { opacity: 1; transform: none; }
+  100% { opacity: 0.25; transform: translateY(2px); }
+}
+
+/* Motion is a signal here, not decoration: the dash says an edge is carrying
+   work and the pulse says a node is thinking. Someone who has asked for less
+   motion still needs the state, so the colour stays and only the movement
+   goes. */
+@media (prefers-reduced-motion: reduce) {
+  .gv-dot-live,
+  .gv-edge-live,
+  .gv-skeleton,
+  .gv-rise,
+  .gv-stage,
+  .gv-packet,
+  .gv-emit {
+    animation: none !important;
+  }
+
+  /* With the animation off, the explainer must still be a complete picture
+     rather than a half-faded one: the outputs stay at full strength and the
+     stages keep their own borders. */
+  .gv-emit {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .gv-packet {
+    display: none;
+  }
+}

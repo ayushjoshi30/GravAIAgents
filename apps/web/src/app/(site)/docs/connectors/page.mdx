@@ -1,0 +1,92 @@
+export const metadata = {
+  title: "Connectors",
+  description:
+    "GravAI connectors: Graviton LOS, the business rules engine, DigiLocker, Account Aggregator, telephony and notifications — with readiness and onboarding requirements for each.",
+};
+
+# Connectors
+
+Each connector is an interface, one production adapter, a sandbox adapter and contract
+tests. The registry reports honestly how ready each one is, and the console's connector
+panel reads the same registry — so "we have an AA integration" cannot be claimed by a page
+nobody checked.
+
+| Status | Meaning |
+|---|---|
+| `live` | Production adapter implemented and exercised against a live endpoint. |
+| `sandbox_only` | Interface and sandbox adapter exist; production adapter pending. |
+| `external_dependency` | Interface defined; requires an external commercial or licensing step. |
+
+## Graviton LOS — `sandbox_only`
+
+Applications, documents, pendencies and status transitions. Graviton stays the system of
+record; GravAI holds a projection and writes back status transitions and pendencies.
+
+**Before it goes live:** a per-tenant base URL and service credentials.
+
+Mapping to canonical models happens in the connector, not in the agents. An agent works
+with a GravAI `Application`, never with whatever shape a particular Graviton deployment
+returns.
+
+## Business Rules Engine — `sandbox_only`
+
+Evaluates an application against the tenant's policy pack and returns every rule outcome.
+The Credit Appraisal agent explains those outcomes; it does not re-implement the rules, and
+it never overrides one.
+
+**Before it goes live:** the BRE endpoint and the policy pack version to pin.
+
+Pinning the policy version matters: a memorandum has to state which policy it was assessed
+against, because the same application can legitimately produce a different outcome after a
+same-day policy change.
+
+## DigiLocker — `sandbox_only`
+
+Issued-document fetch for KYC, with consent capture. Verified data flows into the
+application, which is what makes the KYC agent's cross-check meaningful rather than
+circular.
+
+**Before it goes live:** DigiLocker partner credentials and a registered redirect URI.
+
+## Account Aggregator — `external_dependency`
+
+Consented, real-time bank data via the RBI Account Aggregator framework. This is the
+platform's one genuine capability gap.
+
+The interface and the ReBIT consent-artefact shape are defined — consent handle creation,
+FI request, fetch and decrypt — and a sandbox adapter exists. Fetching real data does not.
+
+**Before it goes live:** an agreement with a Sahamati-certified AA or TSP, plus FIU
+registration.
+
+> This one is deliberately not faked. A sandbox that returns plausible bank data would let
+> a demo imply a capability the platform does not have, and the first real deployment would
+> discover it at the worst possible moment.
+
+## Telephony / CPaaS — `sandbox_only`
+
+Places and receives calls, streams audio to the voice agent, and transfers to a human on
+dispute. The interface is abstract — place, answer, stream, transfer, record — with a
+sandbox adapter that plays audio files so the turn loop can be tested end to end.
+
+**Before it goes live:** a CPaaS account, an outbound caller ID and DLT registration.
+
+## Notifications — `sandbox_only`
+
+SMS, WhatsApp and email, through templates approved in advance. The sandbox adapter logs
+instead of sending.
+
+**Before it goes live:** DLT-registered SMS templates and a WhatsApp BSP account.
+
+Template approval is not a formality. An unregistered template is not delivered, so
+notification templates and their DLT ids are managed in the console's admin section
+alongside their approval status.
+
+## Checking readiness
+
+```bash
+curl -sS http://localhost:8000/v1/connectors -H "Authorization: Bearer $TOKEN"
+```
+
+Or open **Console → Admin → Connector status**, which renders the same data with each
+connector's onboarding requirement next to it.

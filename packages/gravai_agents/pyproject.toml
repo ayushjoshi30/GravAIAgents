@@ -1,0 +1,17 @@
+[project]
+name = "gravai-agents"
+version = "0.1.0"
+description = "GravAI agent registry, prompts, output schemas and guardrails"
+requires-python = ">=3.12"
+dependencies = ["gravai-core", "gravai-sarvam", "pydantic>=2.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_agents"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-sarvam = { workspace = true }

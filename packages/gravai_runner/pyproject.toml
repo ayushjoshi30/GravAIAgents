@@ -1,0 +1,24 @@
+[project]
+name = "gravai-runner"
+version = "0.1.0"
+description = "Assembles agent inputs and runs one agent - shared by the REST API and the MCP server"
+requires-python = ">=3.12"
+dependencies = [
+    "gravai-core",
+    "gravai-agents",
+    "gravai-connectors",
+    "gravai-sarvam",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_runner"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-agents = { workspace = true }
+gravai-connectors = { workspace = true }
+gravai-sarvam = { workspace = true }

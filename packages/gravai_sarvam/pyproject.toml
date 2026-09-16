@@ -1,0 +1,22 @@
+[project]
+name = "gravai-sarvam"
+version = "0.1.0"
+description = "Sarvam AI integration: clients, job poller, rate governor, cost ledger, sandbox"
+requires-python = ">=3.12"
+dependencies = [
+    "gravai-core",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    # Splitting PDFs to fit the provider's ten-page-per-job cap.
+    "pypdf>=5.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_sarvam"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }

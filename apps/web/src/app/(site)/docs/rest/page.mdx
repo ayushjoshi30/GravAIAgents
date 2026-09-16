@@ -1,0 +1,146 @@
+export const metadata = {
+  title: "REST reference",
+  description:
+    "The GravAI REST API: authentication, conventions, the endpoints that exist today, the RFC 9457 error shape and the endpoints still to land.",
+};
+
+# REST reference
+
+Base URL `http://localhost:8000` in local development. OpenAPI is served at
+`/openapi.json` and rendered at `/docs` by the API itself.
+
+## Authentication
+
+Every request carries a bearer token. Every token carries a tenant — there is no
+tenant-less request in GravAI.
+
+```bash
+curl -sS http://localhost:8000/v1/applications \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+In local development the API validates HS256 tokens signed with `AUTH_DEV_SECRET`. Setting
+`OIDC_JWKS_URL` switches validation to RS256 against the provider's keys and refuses the
+dev path outright. A startup check fails the boot if `APP_ENV=prod` and the dev path is
+still active.
+
+## Conventions
+
+- Cursor pagination on list endpoints.
+- `Idempotency-Key` accepted on POST.
+- Errors are RFC 9457 problem details with `application/problem+json`.
+- Every response carries `X-Correlation-Id`, echoed from the request when supplied.
+- Another tenant's id reports as **404 missing**, never 403 — a 403 would confirm the
+  record exists.
+
+## Health
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/healthz` | Liveness. Never touches the database, so a database blip does not get the container killed. |
+| `GET` | `/readyz` | Readiness. Returns 503 when the database is unreachable. Reports dialect, whether row-level security is active, the environment, sandbox state and the auth mode. |
+
+## Agents
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/agents` | Optional `tier` filter (`P0`, `P1`, `P2`). |
+| `GET` | `/v1/agents/{agent_id}` | 404 problem document for an unknown id. |
+
+```json
+{
+  "id": "credit_appraisal",
+  "name": "Credit Appraisal Agent",
+  "tier": "P0",
+  "summary": "Produces the Credit Appraisal Memorandum…",
+  "tool_name": "underwrite_application",
+  "scopes": ["agents:run", "applications:read", "documents:read"],
+  "advisory_only": true,
+  "parity_with": "Underwriting decisioning",
+  "tags": ["credit", "decisioning"]
+}
+```
+
+## Applications
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/applications` | `status`, `limit` (1–200), `offset`. Newest first. |
+| `GET` | `/v1/applications/summary` | Counts by status, for the console's header tiles. |
+| `GET` | `/v1/applications/{id}` | |
+| `POST` | `/v1/applications` | 201. Duplicate `external_id` is a validation failure, not a silent upsert. |
+| `GET` | `/v1/applications/{id}/eligibility` | FOIR and LTV with their inputs. |
+
+Eligibility is arithmetic, computed in code, never by a model. Anything that cannot be
+computed is reported in `missing_inputs` rather than estimated — an invented denominator
+is worse than a blank field.
+
+```json
+{
+  "proposed_emi": "21742.00",
+  "proposed_emi_display": "₹21,742.00",
+  "foir": "0.3970",
+  "foir_display": "39.70%",
+  "ltv": "0.7273",
+  "formula": {
+    "emi": "P * r * (1+r)^n / ((1+r)^n - 1), r = annual rate / 1200",
+    "foir": "(existing_monthly_emi + proposed_emi) / net_monthly_income",
+    "ltv": "loan_amount / collateral_value"
+  },
+  "missing_inputs": []
+}
+```
+
+Aadhaar appears only as `aadhaar_last4`. The full value is never stored, so it cannot be
+returned.
+
+## Audit
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/audit` | `entity_type`, `entity_id`, `limit` (1–1000). Chain order. |
+| `POST` | `/v1/audit/verify` | Recomputes the tenant's chain from the genesis hash. |
+
+```json
+{ "ok": false, "checked": 4182, "first_bad_seq": 2094, "reason": "hash mismatch" }
+```
+
+`false` means a row was altered, removed or reordered. `first_bad_seq` is where to start
+looking.
+
+## Connectors
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/connectors` | Every connector with its readiness and what a tenant must supply to make it live. |
+
+Status is one of `live`, `sandbox_only` or `external_dependency`. The Account Aggregator
+connector is `external_dependency` and stays that way until a licensed AA or TSP agreement
+exists.
+
+## Errors
+
+```json
+{
+  "type": "https://gravai.dev/errors/forbidden",
+  "title": "Forbidden",
+  "detail": "Principal lacks the required scope",
+  "status": 403,
+  "code": "forbidden",
+  "required": ["audit:read"],
+  "held": ["applications:read", "agents:run"],
+  "correlation_id": "9f2a1c4e7b03d518"
+}
+```
+
+Quote the `correlation_id` to support. The console surfaces it on every failed request for
+exactly that reason.
+
+## Not shipped yet
+
+`/v1/runs` (+ `/steps`, `/approve`, `/reject`), `/v1/tasks`, `/v1/usage`, `/v1/cases`,
+`/v1/mandates`, `/v1/calls`, `/v1/consents`, `/v1/rate-cards`, `/v1/prompts`,
+`/v1/webhooks`, `/v1/api-keys`, `/v1/mcp-clients`.
+
+The console already codes against these contracts and renders a labelled empty state when
+they return 404, so the screens do not have to be rewritten when the endpoints land.

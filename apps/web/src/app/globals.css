@@ -1,0 +1,1919 @@
+@import "tailwindcss";
+@import "./gravai-theme.css";
+
+/*
+ * GravAI design system.
+ * -------------------------------------------------------------------------
+ * One light theme. No dark mode, no prefers-color-scheme branch.
+ *
+ * Identity is brand blue #204887 on white. Everything else is a tint of that
+ * blue or a near-neutral grey; semantic green, amber and red appear only where
+ * they carry meaning (pass, attention, fail), never as decoration.
+ *
+ * Nothing outside this file hardcodes a colour, a radius, a shadow or a font.
+ * Components consume the tokens below through Tailwind utility names, so a
+ * change here changes the whole product.
+ *
+ * Four things are layered on top of the original token set, and nothing was
+ * renamed or removed:
+ *   1. an ELEVATION SCALE — ground, raised, elevated, sunken — so a page can
+ *      alternate bands instead of being one uniform white;
+ *   2. a SHADOW RAMP tinted toward the brand hue, so depth belongs to the
+ *      palette rather than being generic black;
+ *   3. DECORATIVE SURFACES (grid, dots, radial brand light, wash, fading
+ *      hairline) as CSS-only utilities, every one of them deliberately quiet;
+ *   4. a TYPE SCALE and a set of CARD VARIANTS with real hierarchy.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* --- Brand ramp. All steps tested against white and against --gv-ink. --- */
+  --gv-brand-50: #f4f7fc;
+  --gv-brand-100: #e8eef8;
+  --gv-brand-200: #cfdcef;
+  --gv-brand-300: #a8bfe0;
+  --gv-brand-400: #6d92c6;
+  --gv-brand: #204887;
+  --gv-brand-600: #1b3d74;
+  --gv-brand-700: #16325e;
+  --gv-brand-800: #112648;
+  --gv-brand-900: #0d1d37;
+  --gv-brand-soft: #eef3fa;
+  --gv-brand-border: #cfdcef;
+  --gv-brand-strong: #1b3d74;
+
+  /* Raw brand channels, for building rgb(... / alpha) values inline. */
+  --gv-brand-rgb: 32 72 135;
+
+  /* --- Neutrals --- */
+  --gv-ground: #f7f9fc;
+  --gv-ground-deep: #eef1f6;
+  --gv-surface: #ffffff;
+  --gv-surface-2: #f7f9fc;
+  --gv-surface-3: #eef1f6;
+  --gv-ink: #101828;
+  --gv-ink-2: #475467;
+  --gv-ink-3: #667085;
+  --gv-line: #e4e8ef;
+  --gv-line-strong: #cfd6e0;
+  --gv-line-faint: #eef1f6; /* the quietest hairline: rows inside a dense table */
+
+  /* --- Elevation scale -----------------------------------------------------
+     Four planes, named for what they are rather than for a number. A page
+     alternates these; a component picks one and stays on it. */
+  --gv-layer-ground: #f7f9fc; /* the page itself */
+  --gv-layer-raised: #ffffff; /* a panel sitting on the page */
+  --gv-layer-elevated: #ffffff; /* a card sitting on a panel — shadow does the work */
+  --gv-layer-sunken: #eef2f7; /* a well cut into a panel: logs, code, previews */
+  --gv-layer-tint: #f6f9fd; /* the brand wash, flattened to an opaque value */
+  --gv-layer-tint-deep: #eef3fa; /* the brand wash one step stronger */
+  --gv-layer-inverse: #16325e; /* the one dark band: deep brand, white text */
+  --gv-layer-inverse-2: #112648;
+
+  /* Hairlines that belong to a plane. */
+  --gv-line-tint: #dde6f4; /* a line drawn on a brand-tinted ground */
+  --gv-line-inverse: rgb(255 255 255 / 0.14);
+
+  /* The alpha washes, for stacking over something that already has a colour. */
+  --gv-wash-brand: rgb(32 72 135 / 0.03);
+  --gv-wash-brand-2: rgb(32 72 135 / 0.06);
+  --gv-wash-ink: rgb(16 24 40 / 0.02);
+
+  /* --- Secondary accent. The teal from the wordmark, used sparingly. --- */
+  --gv-accent: #0c6b5f;
+  --gv-accent-soft: #e6f2f0;
+
+  /* --- Semantic. Meaning only. --- */
+  --gv-pass: #027a48;
+  --gv-pass-soft: #ecfdf3;
+  --gv-pass-border: #abefc6;
+  --gv-amber: #b54708;
+  --gv-amber-soft: #fffaeb;
+  --gv-amber-border: #fedf89;
+  --gv-amber-strong: #93370d;
+  --gv-fail: #b42318;
+  --gv-fail-soft: #fef3f2;
+  --gv-fail-border: #fecdca;
+
+  /* --- Categorical hues ----------------------------------------------------
+     Twelve families, each in the same four steps the semantic colours already
+     use: base is text and iconography on white, `-soft` is the tinted plate a
+     card or icon sits on, `-border` is its edge, `-strong` is text on the soft
+     plate where the base is not dark enough to hold contrast.
+
+     WHY THE PRODUCT IS COLOURFUL. A canvas of forty identical grey cards is
+     slower to read than one where a node's kind is legible without reading its
+     label, and the same is true of an agent catalog, a run timeline and a
+     settings page. Colour here is a second channel carrying information the
+     text already carries — which is the only kind of decoration worth the
+     bytes.
+
+     WHAT KEEPS IT FROM BECOMING NOISE. Every value is the 600 / 50 / 200 / 700
+     step of one ramp family, so nothing is more saturated than anything else
+     and no hue shouts over its neighbours. The assignment of hue to node type
+     is declared once, in `scripts/gen_node_catalog.py`, and generated into
+     `lib/nodeCatalog.ts` — a colour cannot drift away from the thing it names
+     without a test failing.
+
+     THE THREE RESERVED HUES. `green`, `amber` and `rose`/`fail` carry outcome:
+     a run proceeded, a rule flagged risk, a run stopped. Nothing decorative
+     may borrow them, because a green card that does not mean "passed" makes
+     every green card unreadable. Those three are aliases of the existing
+     semantic tokens rather than new values, so they cannot diverge. */
+
+  --gv-hue-violet: #6941c6;
+  --gv-hue-violet-soft: #f4f3ff;
+  --gv-hue-violet-border: #d9d6fe;
+  --gv-hue-violet-strong: #5720b7;
+
+  --gv-hue-indigo: #3538cd;
+  --gv-hue-indigo-soft: #eef4ff;
+  --gv-hue-indigo-border: #c7d7fe;
+  --gv-hue-indigo-strong: #2d31a6;
+
+  --gv-hue-blue: #175cd3;
+  --gv-hue-blue-soft: #eff8ff;
+  --gv-hue-blue-border: #b2ddff;
+  --gv-hue-blue-strong: #1849a9;
+
+  --gv-hue-cyan: #0e7090;
+  --gv-hue-cyan-soft: #ecfdff;
+  --gv-hue-cyan-border: #a5f0fc;
+  --gv-hue-cyan-strong: #155b75;
+
+  /* Teal is the wordmark's own accent, so it keeps the accent value rather
+     than gaining a second, slightly different teal. */
+  --gv-hue-teal: var(--gv-accent);
+  --gv-hue-teal-soft: var(--gv-accent-soft);
+  --gv-hue-teal-border: #a3d9d1;
+  --gv-hue-teal-strong: #08514a;
+
+  --gv-hue-navy: var(--gv-brand);
+  --gv-hue-navy-soft: var(--gv-brand-soft);
+  --gv-hue-navy-border: var(--gv-brand-border);
+  --gv-hue-navy-strong: var(--gv-brand-strong);
+
+  --gv-hue-pink: #c11574;
+  --gv-hue-pink-soft: #fdf2fa;
+  --gv-hue-pink-border: #fcceee;
+  --gv-hue-pink-strong: #9e165f;
+
+  --gv-hue-orange: #c4320a;
+  --gv-hue-orange-soft: #fff6ed;
+  --gv-hue-orange-border: #f9dbaf;
+  --gv-hue-orange-strong: #9c2a10;
+
+  --gv-hue-slate: #475467;
+  --gv-hue-slate-soft: #f8fafc;
+  --gv-hue-slate-border: #e2e8f0;
+  --gv-hue-slate-strong: #334155;
+
+  /* Reserved — outcome, not decoration. Aliases so they cannot diverge from
+     the semantic tokens the rest of the app already reads. */
+  --gv-hue-green: var(--gv-pass);
+  --gv-hue-green-soft: var(--gv-pass-soft);
+  --gv-hue-green-border: var(--gv-pass-border);
+  --gv-hue-green-strong: #05603a;
+
+  --gv-hue-amber: var(--gv-amber);
+  --gv-hue-amber-soft: var(--gv-amber-soft);
+  --gv-hue-amber-border: var(--gv-amber-border);
+  --gv-hue-amber-strong: var(--gv-amber-strong);
+
+  --gv-hue-rose: var(--gv-fail);
+  --gv-hue-rose-soft: var(--gv-fail-soft);
+  --gv-hue-rose-border: var(--gv-fail-border);
+  --gv-hue-rose-strong: #912018;
+
+  /* --- Categorical chart ramp, brand-led. --- */
+  --gv-series-1: #204887;
+  --gv-series-2: #6d92c6;
+  --gv-series-3: #0c6b5f;
+  --gv-series-4: #b54708;
+  --gv-series-5: #667085;
+  --gv-series-6: #a8bfe0;
+
+  /* --- Elevation ramp ------------------------------------------------------
+     Tinted toward the brand hue (rgb 20 40 78) rather than neutral black, so a
+     lifted card reads as the same family of blue as everything else. Four
+     steps: resting sits on the page, raised sits above it, floating is a hover
+     or a pulled-forward card, overlay is a menu or a dialog. */
+  --gv-shadow-resting: 0 1px 2px 0 rgb(20 40 78 / 0.06);
+  --gv-shadow-raised:
+    0 1px 2px -1px rgb(20 40 78 / 0.08), 0 4px 10px -3px rgb(20 40 78 / 0.07);
+  --gv-shadow-floating:
+    0 2px 4px -2px rgb(20 40 78 / 0.08), 0 12px 24px -8px rgb(20 40 78 / 0.12);
+  --gv-shadow-overlay:
+    0 4px 8px -4px rgb(20 40 78 / 0.1), 0 24px 48px -12px rgb(20 40 78 / 0.18);
+
+  /* The brand-tinted shadow a filled primary control carries. */
+  --gv-shadow-brand:
+    0 1px 2px 0 rgb(32 72 135 / 0.22), 0 4px 10px -3px rgb(32 72 135 / 0.28);
+  --gv-shadow-brand-lift:
+    0 2px 4px -1px rgb(32 72 135 / 0.24), 0 10px 20px -6px rgb(32 72 135 / 0.34);
+
+  /* An inner line, for wells and for pressed states. */
+  --gv-shadow-inset: inset 0 1px 2px 0 rgb(20 40 78 / 0.05);
+
+  /* Original names, kept so every existing consumer compiles unchanged. They
+     now resolve to the brand-tinted ramp, which is the whole point. */
+  --gv-shadow-sm: var(--gv-shadow-resting);
+  --gv-shadow-md: var(--gv-shadow-raised);
+  --gv-shadow-lg: var(--gv-shadow-floating);
+
+  --gv-focus-ring: 0 0 0 3px rgb(32 72 135 / 0.16);
+
+  /* --- Motion. One curve, three durations. Anything longer than 300ms reads
+     as a website rather than as a product. --- */
+  --gv-ease: cubic-bezier(0.2, 0, 0.13, 1);
+  --gv-dur-fast: 150ms;
+  --gv-dur: 200ms;
+  --gv-dur-slow: 280ms;
+
+  /* --- Decorative geometry. Exposed as variables so a section can tune the
+     pattern density without a new class. --- */
+  --gv-pattern-size: 32px;
+  --gv-pattern-line: rgb(32 72 135 / 0.05);
+  --gv-pattern-dot: rgb(32 72 135 / 0.11);
+}
+
+@theme inline {
+  --color-brand: var(--gv-brand);
+  --color-brand-50: var(--gv-brand-50);
+  --color-brand-100: var(--gv-brand-100);
+  --color-brand-200: var(--gv-brand-200);
+  --color-brand-300: var(--gv-brand-300);
+  --color-brand-400: var(--gv-brand-400);
+  --color-brand-600: var(--gv-brand-600);
+  --color-brand-700: var(--gv-brand-700);
+  --color-brand-800: var(--gv-brand-800);
+  --color-brand-900: var(--gv-brand-900);
+  --color-brand-soft: var(--gv-brand-soft);
+  --color-brand-border: var(--gv-brand-border);
+  --color-brand-strong: var(--gv-brand-strong);
+
+  /* `blue` is kept as an alias of the brand so no component drifts to a
+     second, unmanaged blue. */
+  --color-blue: var(--gv-brand);
+  --color-blue-soft: var(--gv-brand-soft);
+  --color-blue-strong: var(--gv-brand-strong);
+
+  --color-accent: var(--gv-accent);
+  --color-accent-soft: var(--gv-accent-soft);
+
+  --color-ground: var(--gv-ground);
+  --color-ground-deep: var(--gv-ground-deep);
+  --color-surface: var(--gv-surface);
+  --color-surface-2: var(--gv-surface-2);
+  --color-surface-3: var(--gv-surface-3);
+  --color-ink: var(--gv-ink);
+  --color-ink-2: var(--gv-ink-2);
+  --color-ink-3: var(--gv-ink-3);
+  --color-line: var(--gv-line);
+  --color-line-strong: var(--gv-line-strong);
+  --color-line-faint: var(--gv-line-faint);
+
+  /* Elevation planes as colour utilities: bg-raised, bg-sunken, bg-tint … */
+  --color-raised: var(--gv-layer-raised);
+  --color-elevated: var(--gv-layer-elevated);
+  --color-sunken: var(--gv-layer-sunken);
+  --color-tint: var(--gv-layer-tint);
+  --color-tint-deep: var(--gv-layer-tint-deep);
+  --color-inverse: var(--gv-layer-inverse);
+  --color-inverse-2: var(--gv-layer-inverse-2);
+  --color-line-tint: var(--gv-line-tint);
+
+  --color-pass: var(--gv-pass);
+  --color-pass-soft: var(--gv-pass-soft);
+  --color-pass-border: var(--gv-pass-border);
+  --color-amber: var(--gv-amber);
+  --color-amber-soft: var(--gv-amber-soft);
+  --color-amber-border: var(--gv-amber-border);
+  --color-amber-strong: var(--gv-amber-strong);
+  --color-fail: var(--gv-fail);
+  --color-fail-soft: var(--gv-fail-soft);
+  --color-fail-border: var(--gv-fail-border);
+
+  /* Two faces, not three. Inter carries everything readable — body, UI and
+     display alike — and IBM Plex Mono carries identifiers, hashes and code,
+     where telling 0 from O matters more than warmth.
+
+     `--font-display` is an alias rather than a face of its own, which is the
+     whole typographic position here: a heading is the body face at a larger
+     size and tighter tracking, not a second voice arguing with it. The
+     `.gv-display` family below still owns size, weight and tracking, so every
+     rule that asks for `var(--font-display)` keeps working unchanged.
+
+     The bare "Inter" and "IBM Plex Mono" sit directly behind the next/font
+     variables: if the self-hosted files never arrive, a machine with the face
+     installed still renders what production renders, rather than dropping
+     straight to a system sans. */
+  --font-sans:
+    var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono:
+    var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SFMono-Regular",
+    "Cascadia Mono", Consolas, monospace;
+
+  /* Moderate radii. */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+  --radius-4xl: 20px;
+  --radius-5xl: 24px;
+
+  --shadow-xs: var(--gv-shadow-sm);
+  --shadow-sm: var(--gv-shadow-sm);
+  --shadow-md: var(--gv-shadow-md);
+  --shadow-lg: var(--gv-shadow-lg);
+  --shadow-resting: var(--gv-shadow-resting);
+  --shadow-raised: var(--gv-shadow-raised);
+  --shadow-floating: var(--gv-shadow-floating);
+  --shadow-overlay: var(--gv-shadow-overlay);
+  --shadow-brand: var(--gv-shadow-brand);
+  --shadow-brand-lift: var(--gv-shadow-brand-lift);
+
+  --ease-gv: var(--gv-ease);
+}
+
+@layer base {
+  * {
+    border-color: var(--gv-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* A safety net, not a licence. `clip` — unlike `hidden` — creates no scroll
+     container, so the sticky site header and the sticky console rail keep
+     working. It is set on the root only: the root's overflow propagates to the
+     viewport, which leaves `html` itself unclipped and so leaves any future
+     `position: fixed` drawer or dialog free to cover the screen.
+     It guarantees the page never scrolls sideways at 400px even if one section
+     overshoots — but a wide table or diagram still has to carry its own
+     `.gv-scroll-x`, because clipping content away is not the same as making it
+     reachable. */
+  html {
+    overflow-x: clip;
+  }
+
+  /* Media never widens its column. SVG is deliberately excluded: a diagram
+     without `height: auto` would squash rather than scale, so wide drawings use
+     `.gv-scroll-x` instead. */
+  img,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+
+  body {
+    background-color: var(--gv-ground);
+    color: var(--gv-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv05" 1, "ss01" 1;
+  }
+
+  /* Type scale. Set once; pages choose a level, not a pixel value.
+     These element defaults are what the console and the docs rely on; the
+     marketing scale is the .gv-display / .gv-heading family further down. */
+  h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* Figures align in every table, tile and chart axis. */
+  .font-mono,
+  code,
+  kbd,
+  samp,
+  pre,
+  table,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--gv-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--gv-brand-200);
+    color: var(--gv-ink);
+  }
+}
+
+@layer components {
+  /* =======================================================================
+     1. TYPE SCALE
+     Marketing-weight type. Every step is a clamp() so it degrades on a
+     400px phone without a pile of breakpoints. Pair with the body element
+     defaults above, which the console still uses.
+
+     Tracking runs negative and tightens with size. Inter is a normal-width
+     face drawn for text: left at 0, its default sidebearings open up visibly
+     past about 40px and a display line starts to look spaced out. -0.025em at
+     the top of the scale closes that back up; each smaller step eases toward
+     0, because the same value on a 22px line would crowd it.
+     ===================================================================== */
+
+  /* 34px phone → 64px desktop. The single biggest thing on a page; one per
+     page, and never below a section heading. */
+  .gv-display {
+    font-family: var(--font-display);
+    font-size: clamp(2.125rem, 1.35rem + 3.2vw, 4rem);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+
+  /* 30px → 48px. A hero on an interior page, or a display that shares the
+     fold with something else. */
+  .gv-display-sm {
+    font-family: var(--font-display);
+    font-size: clamp(1.875rem, 1.35rem + 2.2vw, 3rem);
+    font-weight: 600;
+    letter-spacing: -0.023em;
+    line-height: 1.08;
+    text-wrap: balance;
+  }
+
+  /* 28px → 48px. The head of a section band. */
+  .gv-heading {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 1.2rem + 2.1vw, 3rem);
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    line-height: 1.14;
+    text-wrap: balance;
+  }
+
+  /* 22px → 32px. A block inside a section. */
+  .gv-subheading {
+    font-size: clamp(1.375rem, 1.15rem + 0.85vw, 2rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.22;
+    text-wrap: balance;
+  }
+
+  /* 17px → 19px. The paragraph under a display or a heading. */
+  .gv-lede {
+    font-size: clamp(1.0625rem, 1rem + 0.24vw, 1.1875rem);
+    line-height: 1.6;
+    color: var(--gv-ink-2);
+    text-wrap: pretty;
+  }
+
+  /* 15.5px → 17px. Running body copy in a marketing section. */
+  .gv-body {
+    font-size: clamp(0.96875rem, 0.93rem + 0.16vw, 1.0625rem);
+    line-height: 1.65;
+    color: var(--gv-ink-2);
+    text-wrap: pretty;
+  }
+
+  /* 14px → 16px. Card copy, captions with substance, list items. */
+  .gv-support {
+    font-size: clamp(0.875rem, 0.84rem + 0.15vw, 1rem);
+    line-height: 1.6;
+    color: var(--gv-ink-2);
+  }
+
+  /* 12.5px, fixed. Source lines, footnotes, timestamps. */
+  .gv-micro {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--gv-ink-3);
+  }
+
+  /* A figure. Tabular, tight, optically aligned in a row of tiles. */
+  .gv-metric {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 1.35rem + 1.6vw, 2.75rem);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .gv-metric-sm {
+    font-family: var(--font-display);
+    font-size: clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* --- Labels ------------------------------------------------------------
+     .gv-eyebrow, .gv-label and .gv-help keep their names and their roles.
+     The eyebrow moves from 11px/0.06em to 12px/0.09em so it survives next to
+     a 64px display; colour is unchanged, so every existing call site that
+     adds `text-brand` still wins. */
+  .gv-eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--gv-ink-3);
+    font-feature-settings: "cv05" 1;
+  }
+
+  /* The eyebrow with a brand tick in front of it. Use above a display or a
+     section heading, where the eyebrow has to hold its own. */
+  .gv-eyebrow-tick {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55em;
+    color: var(--gv-brand);
+  }
+
+  .gv-eyebrow-tick::before {
+    content: "";
+    width: 1.5rem;
+    height: 2px;
+    border-radius: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--gv-brand) 0%,
+      var(--gv-brand-300) 100%
+    );
+    flex: none;
+  }
+
+  .gv-label {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--gv-ink-2);
+  }
+
+  .gv-help {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--gv-ink-3);
+  }
+
+  /* =======================================================================
+     2. SURFACES AND ELEVATION
+     ===================================================================== */
+
+  /* The original card. Radius nudged 8 → 10 and the shadow is now the
+     brand-tinted resting step. Everything that used it still works. */
+  .gv-card {
+    background: var(--gv-layer-raised);
+    border: 1px solid var(--gv-line);
+    border-radius: 10px;
+    box-shadow: var(--gv-shadow-resting);
+  }
+
+  .gv-card-flat {
+    background: var(--gv-surface);
+    border: 1px solid var(--gv-line);
+    border-radius: 10px;
+  }
+
+  /* --- Card variants -----------------------------------------------------
+     Five roles. Each is a modifier on .gv-card except .gv-well, which is a
+     plane rather than a card. */
+
+  /* PRIMARY / ELEVATED. The one card in a section that carries the argument:
+     a hero aside, a pricing panel, the headline result. */
+  .gv-card-elevated {
+    border-color: var(--gv-brand-200);
+    border-radius: 14px;
+    box-shadow: var(--gv-shadow-raised);
+  }
+
+  /* SECONDARY. Supporting information that must not compete: a footnote
+     block, a sidebar fact, a second-tier list item. No shadow, tinted
+     ground, so it recedes on a white band and disappears on a soft one. */
+  .gv-card-secondary {
+    background: var(--gv-layer-ground);
+    border-color: var(--gv-line);
+    box-shadow: none;
+  }
+
+  /* DATA / METRIC. A figure and its label. The brand hairline down the left
+     edge is what makes a row of these read as instrumentation rather than as
+     four more boxes. Figures are tabular by default. */
+  .gv-card-metric {
+    position: relative;
+    overflow: hidden;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gv-card-metric::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(
+      180deg,
+      var(--gv-brand) 0%,
+      var(--gv-brand-300) 100%
+    );
+  }
+
+  /* The same tile without the rule, for a dense grid where four left edges
+     would be noise. */
+  .gv-card-metric-plain {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* INTERACTIVE. Anything the whole surface of which is a link or a button.
+     Lifts 3px, the border goes brand, the shadow steps to floating and any
+     .gv-card-arrow inside slides. Focus-within mirrors hover, so keyboard
+     users get the same affordance. */
+  .gv-card-interactive {
+    cursor: pointer;
+    transition:
+      transform var(--gv-dur) var(--gv-ease),
+      box-shadow var(--gv-dur) var(--gv-ease),
+      border-color var(--gv-dur-fast) var(--gv-ease),
+      background-color var(--gv-dur-fast) var(--gv-ease);
+  }
+
+  .gv-card-interactive:hover,
+  .gv-card-interactive:focus-within {
+    transform: translateY(-3px);
+    border-color: var(--gv-brand-300);
+    box-shadow: var(--gv-shadow-floating);
+  }
+
+  .gv-card-interactive:active {
+    transform: translateY(-1px);
+    box-shadow: var(--gv-shadow-raised);
+  }
+
+  /* The arrow that reveals on hover. Put it on the glyph itself. */
+  .gv-card-arrow {
+    color: var(--gv-ink-3);
+    opacity: 0.55;
+    transition:
+      transform var(--gv-dur) var(--gv-ease),
+      opacity var(--gv-dur) var(--gv-ease),
+      color var(--gv-dur) var(--gv-ease);
+  }
+
+  .gv-card-interactive:hover .gv-card-arrow,
+  .gv-card-interactive:focus-within .gv-card-arrow {
+    transform: translateX(3px);
+    opacity: 1;
+    color: var(--gv-brand);
+  }
+
+  /* FEATURE. A visual and its text. Larger radius, a brand-tinted ground and
+     a slightly stronger hairline: this is the card that is allowed to be a
+     picture. Pair with .gv-figure for the visual half. */
+  .gv-card-feature {
+    background:
+      linear-gradient(180deg, var(--gv-layer-tint) 0%, var(--gv-surface) 62%);
+    border-color: var(--gv-line-tint);
+    border-radius: 16px;
+    box-shadow: var(--gv-shadow-raised);
+    overflow: hidden;
+  }
+
+  /* The visual half of a feature card, or any inline diagram frame: a sunken
+     plane with an inner hairline, so a drawing sits *in* the card. */
+  .gv-figure {
+    font-family: var(--font-display);
+    background: var(--gv-layer-tint);
+    border: 1px solid var(--gv-line-tint);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* SUNKEN WELL. Cut into a panel: a log, a payload, a terminal, a preview.
+     Inner shadow rather than outer, because it is below the plane. */
+  .gv-well {
+    background: var(--gv-layer-sunken);
+    border: 1px solid var(--gv-line);
+    border-radius: 10px;
+    box-shadow: var(--gv-shadow-inset);
+  }
+
+  /* A raised panel: the plane a group of cards sits on. Bigger radius than a
+     card so the nesting reads correctly. */
+  .gv-panel {
+    background: var(--gv-layer-raised);
+    border: 1px solid var(--gv-line);
+    border-radius: 14px;
+    box-shadow: var(--gv-shadow-raised);
+  }
+
+  /* The one dark plane in a light-only system: deep brand, white text. Use at
+     most once per page — a closing call to action, or a single band that has
+     to stop the scroll. Body text on it is rgb(255 255 255 / 0.78) against
+     #16325e, which clears 4.5:1. */
+  .gv-inverse {
+    background:
+      radial-gradient(
+        120% 140% at 12% 0%,
+        var(--gv-layer-inverse) 0%,
+        var(--gv-layer-inverse-2) 68%
+      ),
+      var(--gv-layer-inverse-2);
+    color: #ffffff;
+    border-color: var(--gv-line-inverse);
+  }
+
+  .gv-inverse .gv-eyebrow,
+  .gv-inverse .gv-help,
+  .gv-inverse .gv-micro {
+    color: rgb(255 255 255 / 0.66);
+  }
+
+  .gv-inverse .gv-lede,
+  .gv-inverse .gv-body,
+  .gv-inverse .gv-support,
+  .gv-inverse .gv-label {
+    color: rgb(255 255 255 / 0.82);
+  }
+
+  /* --- Section bands -----------------------------------------------------
+     Full-bleed grounds. A page alternates them: white, soft, white, tint.
+     Each carries its own top hairline so bands never need a separate rule. */
+  .gv-band-white {
+    background: var(--gv-surface);
+  }
+
+  .gv-band-soft {
+    background: var(--gv-layer-ground);
+  }
+
+  .gv-band-tint {
+    background: var(--gv-layer-tint);
+  }
+
+  .gv-band-tint-deep {
+    background: var(--gv-layer-tint-deep);
+  }
+
+  .gv-band-deep {
+    background: var(--gv-ground-deep);
+  }
+
+  .gv-band-inverse {
+    background:
+      radial-gradient(
+        110% 160% at 10% -10%,
+        var(--gv-layer-inverse) 0%,
+        var(--gv-layer-inverse-2) 70%
+      ),
+      var(--gv-layer-inverse-2);
+    color: #ffffff;
+  }
+
+  /* =======================================================================
+     3. DECORATIVE SURFACES
+     All CSS, no assets, no requests. Each one paints into a ::before at
+     z-index -1 behind its own content, so nothing in the markup has to be
+     re-stacked. Every one of them is deliberately faint: if you can see the
+     pattern before you see the words, it is turned up too high.
+     ===================================================================== */
+
+  .gv-grid-faint,
+  .gv-grid-fine,
+  .gv-dots,
+  .gv-radial-brand,
+  .gv-radial-brand-center,
+  .gv-wash {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .gv-grid-faint::before,
+  .gv-grid-fine::before,
+  .gv-dots::before,
+  .gv-radial-brand::before,
+  .gv-radial-brand-center::before,
+  .gv-wash::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* A 32px engineering grid, faded out toward the bottom so it never fights
+     the content below it. Behind a hero, or behind a diagram. */
+  .gv-grid-faint::before {
+    background-image:
+      linear-gradient(to right, var(--gv-pattern-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--gv-pattern-line) 1px, transparent 1px);
+    background-size: var(--gv-pattern-size) var(--gv-pattern-size);
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      rgb(0 0 0 / 0.9) 0%,
+      transparent 78%
+    );
+    mask-image: linear-gradient(180deg, rgb(0 0 0 / 0.9) 0%, transparent 78%);
+  }
+
+  /* The same grid at 16px, for a small frame such as a diagram well. */
+  .gv-grid-fine::before {
+    background-image:
+      linear-gradient(to right, var(--gv-pattern-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--gv-pattern-line) 1px, transparent 1px);
+    background-size: 16px 16px;
+    -webkit-mask-image: radial-gradient(
+      80% 80% at 50% 50%,
+      rgb(0 0 0 / 0.85),
+      transparent 100%
+    );
+    mask-image: radial-gradient(
+      80% 80% at 50% 50%,
+      rgb(0 0 0 / 0.85),
+      transparent 100%
+    );
+  }
+
+  /* A dot field. Quieter than the grid; use where a grid would read as a
+     table. */
+  .gv-dots::before {
+    background-image: radial-gradient(
+      var(--gv-pattern-dot) 1px,
+      transparent 1px
+    );
+    background-size: 20px 20px;
+    -webkit-mask-image: linear-gradient(
+      180deg,
+      rgb(0 0 0 / 0.8) 0%,
+      transparent 72%
+    );
+    mask-image: linear-gradient(180deg, rgb(0 0 0 / 0.8) 0%, transparent 72%);
+  }
+
+  /* A soft brand light from the top left. This is the only "glow" in the
+     system, it is 6% at its brightest, and it replaces every gradient the
+     brief rules out. */
+  .gv-radial-brand::before {
+    background: radial-gradient(
+      62% 78% at 8% -6%,
+      rgb(32 72 135 / 0.07) 0%,
+      rgb(32 72 135 / 0.028) 38%,
+      transparent 72%
+    );
+  }
+
+  /* The same light, centred above the fold. For a centred hero or a closing
+     call to action. */
+  .gv-radial-brand-center::before {
+    background: radial-gradient(
+      70% 90% at 50% -14%,
+      rgb(32 72 135 / 0.08) 0%,
+      rgb(32 72 135 / 0.03) 40%,
+      transparent 74%
+    );
+  }
+
+  /* The flat 3% brand wash, as an overlay rather than an opaque colour. Use
+     when the thing underneath already has a ground. */
+  .gv-wash::before {
+    background: var(--gv-wash-brand);
+  }
+
+  /* A hairline that fades out at both ends. The section separator that does
+     not look like a table border. */
+  .gv-rule {
+    height: 1px;
+    border: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--gv-line-strong) 18%,
+      var(--gv-line-strong) 82%,
+      transparent 100%
+    );
+  }
+
+  /* The same rule in brand, shorter and heavier: an accent under a heading. */
+  .gv-rule-brand {
+    height: 2px;
+    width: 2.5rem;
+    border: 0;
+    border-radius: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--gv-brand) 0%,
+      var(--gv-brand-300) 100%
+    );
+  }
+
+  /* A top hairline that fades at both ends, drawn on the element itself.
+     Use on a band so the join between two bands is soft. */
+  .gv-edge-top {
+    border-top: 1px solid transparent;
+    border-image: linear-gradient(
+        90deg,
+        transparent,
+        var(--gv-line) 20%,
+        var(--gv-line) 80%,
+        transparent
+      )
+      1;
+  }
+
+  /* A vertical brand spine, for a stepped or numbered sequence. Put it on the
+     list; each item positions its own marker. */
+  .gv-spine {
+    position: relative;
+  }
+
+  .gv-spine::before {
+    content: "";
+    position: absolute;
+    left: 0.9375rem;
+    top: 0.75rem;
+    bottom: 0.75rem;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      var(--gv-brand-200) 0%,
+      var(--gv-line) 100%
+    );
+  }
+
+  /* =======================================================================
+     4. CONTROLS
+     ===================================================================== */
+
+  /* Shared button chassis. Button.tsx composes these with its size classes;
+     nothing else should style a button. */
+  .gv-btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition:
+      background-color var(--gv-dur-fast) var(--gv-ease),
+      border-color var(--gv-dur-fast) var(--gv-ease),
+      color var(--gv-dur-fast) var(--gv-ease),
+      box-shadow var(--gv-dur) var(--gv-ease),
+      transform var(--gv-dur) var(--gv-ease);
+  }
+
+  /* The real SaaS primary: brand fill, white text, a brand-tinted shadow that
+     lifts on hover and settles on press. */
+  .gv-btn-primary {
+    background: var(--gv-brand);
+    border-color: var(--gv-brand);
+    color: #ffffff;
+    box-shadow: var(--gv-shadow-brand);
+  }
+
+  .gv-btn-primary:hover:not(:disabled) {
+    background: var(--gv-brand-600);
+    border-color: var(--gv-brand-600);
+    box-shadow: var(--gv-shadow-brand-lift);
+    transform: translateY(-1px);
+  }
+
+  .gv-btn-primary:active:not(:disabled) {
+    background: var(--gv-brand-700);
+    border-color: var(--gv-brand-700);
+    box-shadow: var(--gv-shadow-brand);
+    transform: translateY(0);
+  }
+
+  .gv-btn-secondary {
+    background: var(--gv-surface);
+    border-color: var(--gv-brand-border);
+    color: var(--gv-brand);
+    box-shadow: var(--gv-shadow-resting);
+  }
+
+  .gv-btn-secondary:hover:not(:disabled) {
+    background: var(--gv-brand-50);
+    border-color: var(--gv-brand-300);
+    box-shadow: var(--gv-shadow-raised);
+    transform: translateY(-1px);
+  }
+
+  .gv-btn-secondary:active:not(:disabled) {
+    background: var(--gv-brand-100);
+    box-shadow: var(--gv-shadow-resting);
+    transform: translateY(0);
+  }
+
+  .gv-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--gv-ink-2);
+  }
+
+  .gv-btn-ghost:hover:not(:disabled) {
+    background: var(--gv-brand-50);
+    color: var(--gv-brand);
+  }
+
+  .gv-btn-danger {
+    background: var(--gv-surface);
+    border-color: var(--gv-fail-border);
+    color: var(--gv-fail);
+    box-shadow: var(--gv-shadow-resting);
+  }
+
+  .gv-btn-danger:hover:not(:disabled) {
+    background: var(--gv-fail-soft);
+    border-color: var(--gv-fail);
+  }
+
+  /* On the one inverse band, the primary flips to white-on-brand so it still
+     reads as the primary action. */
+  .gv-inverse .gv-btn-primary,
+  .gv-band-inverse .gv-btn-primary {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: var(--gv-brand-700);
+    box-shadow: 0 2px 6px -1px rgb(0 0 0 / 0.28);
+  }
+
+  .gv-inverse .gv-btn-primary:hover:not(:disabled),
+  .gv-band-inverse .gv-btn-primary:hover:not(:disabled) {
+    background: var(--gv-brand-50);
+    border-color: var(--gv-brand-50);
+    color: var(--gv-brand-700);
+  }
+
+  .gv-inverse .gv-btn-secondary,
+  .gv-band-inverse .gv-btn-secondary {
+    background: transparent;
+    border-color: rgb(255 255 255 / 0.34);
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .gv-inverse .gv-btn-secondary:hover:not(:disabled),
+  .gv-band-inverse .gv-btn-secondary:hover:not(:disabled) {
+    background: rgb(255 255 255 / 0.1);
+    border-color: rgb(255 255 255 / 0.55);
+    color: #ffffff;
+  }
+
+  .gv-inverse :focus-visible,
+  .gv-band-inverse :focus-visible {
+    outline-color: #ffffff;
+  }
+
+  .gv-field {
+    width: 100%;
+    height: 38px;
+    padding: 0 10px;
+    font-size: 13.5px;
+    color: var(--gv-ink);
+    background: var(--gv-surface);
+    border: 1px solid var(--gv-line-strong);
+    border-radius: 6px;
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  textarea.gv-field {
+    height: auto;
+    padding: 8px 10px;
+    line-height: 1.55;
+    resize: vertical;
+  }
+
+  .gv-field::placeholder {
+    color: var(--gv-ink-3);
+  }
+
+  .gv-field:hover:not(:disabled) {
+    border-color: var(--gv-brand-300);
+  }
+
+  .gv-field:focus {
+    outline: none;
+    border-color: var(--gv-brand);
+    box-shadow: var(--gv-focus-ring);
+  }
+
+  .gv-field[aria-invalid="true"] {
+    border-color: var(--gv-fail);
+  }
+
+  .gv-field[aria-invalid="true"]:focus {
+    box-shadow: 0 0 0 3px rgb(180 35 24 / 0.14);
+  }
+
+  .gv-link {
+    color: var(--gv-brand);
+    font-weight: 500;
+    text-decoration: none;
+    transition: color 120ms ease;
+  }
+
+  .gv-link:hover {
+    color: var(--gv-brand-700);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* An inline "keep reading" link whose arrow moves. The arrow must be the
+     last element inside. */
+  .gv-link-arrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .gv-link-arrow > :last-child {
+    transition: transform var(--gv-dur) var(--gv-ease);
+  }
+
+  .gv-link-arrow:hover > :last-child {
+    transform: translateX(3px);
+  }
+
+  .gv-skip {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+  }
+
+  .gv-skip:focus {
+    left: 12px;
+    top: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: var(--gv-surface);
+    border: 1px solid var(--gv-brand);
+    box-shadow: var(--gv-shadow-md);
+  }
+
+  /* =======================================================================
+     5. PRODUCT-UI FRAGMENTS
+     Small pieces of chrome that make a marketing page look like a product
+     rather than a brochure. All markup and CSS, no screenshots.
+     ===================================================================== */
+
+  /* A window chrome bar for a fake console frame. Three dots and a label. */
+  .gv-chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--gv-layer-ground);
+    border-bottom: 1px solid var(--gv-line);
+  }
+
+  .gv-chrome::before {
+    content: "";
+    flex: none;
+    width: 2.75rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background:
+      radial-gradient(circle at 0.25rem 50%, var(--gv-line-strong) 0.25rem, transparent 0.26rem),
+      radial-gradient(circle at 1.375rem 50%, var(--gv-line-strong) 0.25rem, transparent 0.26rem),
+      radial-gradient(circle at 2.5rem 50%, var(--gv-line-strong) 0.25rem, transparent 0.26rem);
+  }
+
+  /* A one-line toolbar inside a panel: a header strip above a body. */
+  .gv-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    background: var(--gv-layer-ground);
+    border-bottom: 1px solid var(--gv-line);
+  }
+
+  /* A live-status pip. Colour is never the only signal — always put the word
+     next to it. */
+  .gv-pip {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--gv-pass);
+    box-shadow: 0 0 0 3px rgb(2 122 72 / 0.14);
+    flex: none;
+  }
+
+  .gv-pip-brand {
+    background: var(--gv-brand);
+    box-shadow: 0 0 0 3px rgb(32 72 135 / 0.14);
+  }
+
+  .gv-pip-amber {
+    background: var(--gv-amber);
+    box-shadow: 0 0 0 3px rgb(181 71 8 / 0.14);
+  }
+
+  .gv-pip-fail {
+    background: var(--gv-fail);
+    box-shadow: 0 0 0 3px rgb(180 35 24 / 0.14);
+  }
+
+  /* An icon plate: the rounded brand square an icon sits in, three sizes. */
+  .gv-icon-plate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9px;
+    background: var(--gv-brand-50);
+    border: 1px solid var(--gv-brand-100);
+    color: var(--gv-brand);
+    flex: none;
+  }
+
+  .gv-icon-plate-sm {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 7px;
+  }
+
+  .gv-icon-plate-lg {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 11px;
+  }
+
+  /* The solid version, for the single most important icon on a page. */
+  .gv-icon-plate-solid {
+    background: var(--gv-brand);
+    border-color: var(--gv-brand);
+    color: #ffffff;
+    box-shadow: var(--gv-shadow-brand);
+  }
+
+  /* Any wide thing — a table, a diagram, a timeline — gets its own scroller
+     so the page itself never scrolls sideways at 400px. */
+  .gv-scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* A hover lift for anything that is not a card. */
+  .gv-lift {
+    transition:
+      transform var(--gv-dur) var(--gv-ease),
+      box-shadow var(--gv-dur) var(--gv-ease);
+  }
+
+  .gv-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--gv-shadow-floating);
+  }
+
+  /* A hairline divider between the rows of a list, in one declaration. */
+  .gv-divide > * + * {
+    border-top: 1px solid var(--gv-line);
+  }
+
+  /* A reading measure. Body copy past ~70 characters stops being readable, and
+     a 1240px container is far wider than that. */
+  .gv-measure {
+    max-width: 62ch;
+  }
+
+  .gv-measure-wide {
+    max-width: 76ch;
+  }
+
+  /* =======================================================================
+     6. HAIRLINE CELL GRID
+     The premium alternative to a row of floating cards: one bordered block
+     subdivided by 1px rules, so a group of facts reads as one instrument.
+     Put the column counts on the same element with Tailwind
+     (`sm:grid-cols-2 lg:grid-cols-4`) — but never a `gap-*` utility, because
+     the 1px gap IS the rule.
+     ===================================================================== */
+  .gv-cells {
+    display: grid;
+    gap: 1px;
+    background: var(--gv-line);
+    border: 1px solid var(--gv-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .gv-cells > * {
+    background: var(--gv-layer-raised);
+    min-width: 0;
+  }
+
+  /* The same block cut into a tinted plane rather than a white one. */
+  .gv-cells-tint > * {
+    background: var(--gv-layer-tint);
+  }
+
+  /* Raised: the cell block as the one panel a section is built around. */
+  .gv-cells-raised {
+    box-shadow: var(--gv-shadow-raised);
+  }
+
+  /* =======================================================================
+     7. DATA TABLE
+     For a comparison, a control map, a pricing matrix — anything that is
+     genuinely tabular. Always wrap it in a `.gv-scroll-x` container: the
+     table may be wider than a phone, the page may not.
+     ===================================================================== */
+  .gv-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13.5px;
+    text-align: left;
+  }
+
+  .gv-table th {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gv-ink-3);
+    background: var(--gv-layer-ground);
+    border-bottom: 1px solid var(--gv-line);
+    padding: 0.625rem 1rem;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  .gv-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gv-line-faint);
+    color: var(--gv-ink-2);
+    vertical-align: top;
+  }
+
+  /* The first column is the row's name, so it carries the ink weight. */
+  .gv-table tbody th {
+    background: transparent;
+    border-bottom: 1px solid var(--gv-line-faint);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13.5px;
+    color: var(--gv-ink);
+    white-space: normal;
+    vertical-align: top;
+  }
+
+  .gv-table tbody tr:last-child td,
+  .gv-table tbody tr:last-child th {
+    border-bottom: 0;
+  }
+
+  /* Figures right-align and go tabular, so a column of numbers is comparable
+     at a glance rather than ragged. */
+  .gv-table [data-numeric],
+  .gv-table .gv-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    color: var(--gv-ink);
+  }
+
+  .gv-table-compact th {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .gv-table-compact td,
+  .gv-table-compact tbody th {
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* A row the table is making a point about. */
+  .gv-table tr.gv-row-marked td,
+  .gv-table tr.gv-row-marked th {
+    background: var(--gv-brand-50);
+  }
+
+  /* =======================================================================
+     8. LISTS, QUOTES AND INLINE CHROME
+     ===================================================================== */
+
+  /* A feature list with a brand check. The glyph is drawn from two borders —
+     markup and CSS, no icon font, no asset. Pair with `.gv-support`. */
+  .gv-checklist {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .gv-checklist > li {
+    position: relative;
+    padding-left: 1.75rem;
+    margin-bottom: 0.625rem;
+  }
+
+  .gv-checklist > li::before {
+    content: "";
+    position: absolute;
+    left: 0.3125rem;
+    top: 0.42em;
+    width: 0.3125rem;
+    height: 0.625rem;
+    border: solid var(--gv-brand);
+    border-width: 0 1.6px 1.6px 0;
+    transform: rotate(42deg);
+  }
+
+  /* The same list where each item is a fact rather than a benefit: a square
+     brand tick instead of a check. */
+  .gv-ticklist {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .gv-ticklist > li {
+    position: relative;
+    padding-left: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .gv-ticklist > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.62em;
+    width: 0.5rem;
+    height: 1.5px;
+    background: var(--gv-brand-300);
+  }
+
+  /* A pull quote. No quotation marks drawn, no photograph — the brand rule and
+     the larger type are the whole device. */
+  .gv-quote {
+    border-left: 2px solid var(--gv-brand-300);
+    padding-left: 1.25rem;
+    font-size: clamp(1.0625rem, 0.98rem + 0.4vw, 1.3125rem);
+    line-height: 1.5;
+    letter-spacing: -0.012em;
+    color: var(--gv-ink);
+    text-wrap: pretty;
+  }
+
+  .gv-quote cite {
+    display: block;
+    margin-top: 0.75rem;
+    font-size: 12.5px;
+    font-style: normal;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--gv-ink-3);
+  }
+
+  /* An inline identifier outside `.gv-prose`: an endpoint, a scope, a field
+     name in running marketing copy. */
+  .gv-code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--gv-brand-50);
+    border: 1px solid var(--gv-brand-100);
+    border-radius: 4px;
+    padding: 0.1em 0.36em;
+    color: var(--gv-brand-700);
+    white-space: nowrap;
+  }
+
+  /* A key cap. For a keyboard shortcut in a product-chrome fragment. */
+  .gv-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.375rem;
+    padding: 0 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--gv-ink-2);
+    background: var(--gv-surface);
+    border: 1px solid var(--gv-line-strong);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+
+  /* A segmented control. Purely the chrome — the active item is marked with
+     `data-active="true"`, and the component owning it decides what active
+     means. State is never signalled by colour alone: the active item also
+     gains a white ground, a border and a shadow. */
+  .gv-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: var(--gv-layer-sunken);
+    border: 1px solid var(--gv-line);
+    border-radius: 9px;
+  }
+
+  .gv-segment-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.75rem;
+    padding: 0 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--gv-ink-2);
+    white-space: nowrap;
+    transition:
+      background-color var(--gv-dur-fast) var(--gv-ease),
+      color var(--gv-dur-fast) var(--gv-ease),
+      box-shadow var(--gv-dur-fast) var(--gv-ease);
+  }
+
+  .gv-segment-item:hover {
+    color: var(--gv-ink);
+  }
+
+  .gv-segment-item[data-active="true"],
+  .gv-segment-item[aria-selected="true"],
+  .gv-segment-item[aria-current="true"] {
+    background: var(--gv-surface);
+    border-color: var(--gv-line);
+    color: var(--gv-brand);
+    box-shadow: var(--gv-shadow-resting);
+  }
+
+  /* =======================================================================
+     9. THE INVERSE BAND, CONTINUED
+     Everything above is drawn for a light ground. These are the descendants
+     that would otherwise be invisible on the one dark band.
+     ===================================================================== */
+
+  /* A card that belongs on the inverse band: translucent white rather than a
+     stark white rectangle. `.gv-card` still works on the band if a hard white
+     panel is what you actually want. */
+  .gv-card-inverse {
+    background: rgb(255 255 255 / 0.06);
+    border-color: rgb(255 255 255 / 0.16);
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .gv-inverse .gv-rule,
+  .gv-band-inverse .gv-rule {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(255 255 255 / 0.22) 18%,
+      rgb(255 255 255 / 0.22) 82%,
+      transparent 100%
+    );
+  }
+
+  .gv-inverse .gv-rule-brand,
+  .gv-band-inverse .gv-rule-brand {
+    background: linear-gradient(
+      90deg,
+      #ffffff 0%,
+      rgb(255 255 255 / 0.35) 100%
+    );
+  }
+
+  .gv-inverse .gv-eyebrow-tick::before,
+  .gv-band-inverse .gv-eyebrow-tick::before {
+    background: linear-gradient(
+      90deg,
+      #ffffff 0%,
+      rgb(255 255 255 / 0.35) 100%
+    );
+  }
+
+  .gv-inverse .gv-eyebrow-tick,
+  .gv-band-inverse .gv-eyebrow-tick {
+    color: rgb(255 255 255 / 0.82);
+  }
+
+  .gv-inverse .gv-divide > * + *,
+  .gv-band-inverse .gv-divide > * + * {
+    border-top-color: var(--gv-line-inverse);
+  }
+
+  .gv-inverse .gv-cells,
+  .gv-band-inverse .gv-cells {
+    background: rgb(255 255 255 / 0.14);
+    border-color: rgb(255 255 255 / 0.16);
+  }
+
+  .gv-inverse .gv-cells > *,
+  .gv-band-inverse .gv-cells > * {
+    background: var(--gv-layer-inverse-2);
+  }
+
+  .gv-inverse .gv-icon-plate,
+  .gv-band-inverse .gv-icon-plate {
+    background: rgb(255 255 255 / 0.1);
+    border-color: rgb(255 255 255 / 0.2);
+    color: #ffffff;
+  }
+
+  .gv-inverse .gv-icon-plate-solid,
+  .gv-band-inverse .gv-icon-plate-solid {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: var(--gv-brand-700);
+    box-shadow: none;
+  }
+
+  .gv-inverse .gv-well,
+  .gv-band-inverse .gv-well {
+    background: rgb(0 0 0 / 0.18);
+    border-color: rgb(255 255 255 / 0.12);
+    box-shadow: none;
+  }
+
+  .gv-inverse .gv-link,
+  .gv-band-inverse .gv-link {
+    color: #ffffff;
+    text-decoration-color: rgb(255 255 255 / 0.5);
+  }
+
+  .gv-inverse .gv-link:hover,
+  .gv-band-inverse .gv-link:hover {
+    color: #ffffff;
+  }
+
+  .gv-inverse .gv-code,
+  .gv-band-inverse .gv-code {
+    background: rgb(255 255 255 / 0.1);
+    border-color: rgb(255 255 255 / 0.18);
+    color: #ffffff;
+  }
+
+  /* The eyebrow in brand, without the tick. `.gv-eyebrow` on its own is ink-3
+     so the console's dense screens stay quiet; a marketing eyebrow wants the
+     brand. `Eyebrow` and `SectionHeading` already emit `text-brand`, so this is
+     for hand-rolled markup. */
+  .gv-eyebrow-brand {
+    color: var(--gv-brand);
+  }
+}
+
+/* --- Documentation prose -------------------------------------------------- */
+.gv-prose {
+  color: var(--gv-ink-2);
+  max-width: 76ch;
+  font-size: 14.5px;
+  line-height: 1.68;
+}
+
+.gv-prose h1 {
+  font-size: 1.75rem;
+  color: var(--gv-ink);
+  margin-bottom: 0.6rem;
+}
+
+.gv-prose h2 {
+  font-size: 1.2rem;
+  color: var(--gv-ink);
+  margin-top: 2.25rem;
+  margin-bottom: 0.6rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--gv-line);
+}
+
+.gv-prose h3 {
+  font-size: 1rem;
+  color: var(--gv-ink);
+  margin-top: 1.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.gv-prose p,
+.gv-prose ul,
+.gv-prose ol,
+.gv-prose blockquote {
+  margin-bottom: 0.9rem;
+}
+
+.gv-prose ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.gv-prose ul > li {
+  position: relative;
+  padding-left: 1.1rem;
+  margin-bottom: 0.3rem;
+}
+
+.gv-prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gv-brand-300);
+}
+
+.gv-prose ol {
+  list-style: decimal;
+  padding-left: 1.3rem;
+}
+
+.gv-prose ol > li {
+  margin-bottom: 0.3rem;
+  padding-left: 0.2rem;
+}
+
+.gv-prose a {
+  color: var(--gv-brand);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--gv-brand-300);
+}
+
+.gv-prose a:hover {
+  text-decoration-color: var(--gv-brand);
+}
+
+.gv-prose strong {
+  color: var(--gv-ink);
+  font-weight: 600;
+}
+
+.gv-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--gv-brand-50);
+  border: 1px solid var(--gv-brand-100);
+  border-radius: 4px;
+  padding: 0.1em 0.36em;
+  color: var(--gv-brand-700);
+}
+
+.gv-prose pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  background: var(--gv-ink);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin-bottom: 1.2rem;
+  color: #e6ebf3;
+}
+
+.gv-prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.gv-prose blockquote {
+  border-left: 3px solid var(--gv-brand-300);
+  background: var(--gv-brand-50);
+  border-radius: 0 6px 6px 0;
+  padding: 12px 16px;
+  color: var(--gv-ink-2);
+}
+
+.gv-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.gv-prose table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  margin-bottom: 1.4rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.gv-prose th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gv-ink-3);
+  background: var(--gv-surface-2);
+  border-bottom: 1px solid var(--gv-line);
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.gv-prose td {
+  border-bottom: 1px solid var(--gv-line);
+  padding: 9px 12px;
+  vertical-align: top;
+}
+
+.gv-prose hr {
+  border: 0;
+  border-top: 1px solid var(--gv-line);
+  margin: 2rem 0;
+}
+
+/* --- Charts --------------------------------------------------------------- */
+.recharts-cartesian-axis-tick text {
+  font-size: 11px;
+  fill: var(--gv-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.recharts-legend-item-text {
+  font-size: 12px;
+  color: var(--gv-ink-2) !important;
+}
+
+.recharts-cartesian-grid line {
+  stroke: var(--gv-line);
+}
+
+/* --- Navigation menu ------------------------------------------------------ */
+/* Decoration only; the reduced-motion block below neutralises it. */
+@keyframes gv-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gv-menu-in {
+  animation: gv-menu-in 130ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Neutralising the transition is not enough for a hover lift: without this
+     the element still jumps 3px instantly. Suppress the displacement itself
+     and leave the colour and shadow change to carry the affordance. */
+  .gv-card-interactive:hover,
+  .gv-card-interactive:focus-within,
+  .gv-card-interactive:active,
+  .gv-lift:hover,
+  .gv-btn-primary:hover:not(:disabled),
+  .gv-btn-secondary:hover:not(:disabled) {
+    transform: none !important;
+  }
+
+  .gv-card-interactive:hover .gv-card-arrow,
+  .gv-card-interactive:focus-within .gv-card-arrow,
+  .gv-link-arrow:hover > :last-child {
+    transform: none !important;
+  }
+}

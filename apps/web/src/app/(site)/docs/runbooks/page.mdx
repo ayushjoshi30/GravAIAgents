@@ -1,0 +1,133 @@
+export const metadata = {
+  title: "Runbooks",
+  description:
+    "GravAI operational runbooks: AI provider outage, rate-limit saturation and backlog drain, key rotation, audit chain verification, prompt rollback and tenant onboarding.",
+};
+
+# Runbooks
+
+Each runbook names the signal that triggers it, the immediate action, and the check that
+confirms recovery. Every one has been executed at least once before a deployment is
+considered hardened.
+
+## AI provider outage
+
+**Signal.** Circuit breaker opens on a product after five consecutive failures; the
+Datadog monitor for provider error rate fires.
+
+1. Confirm which products are affected on **Console → Admin → System status**. A
+   Document Intelligence outage does not imply a language-model outage; the breakers are
+   per product.
+2. Work queues on the affected task queue, not on the others. Runs already waiting on a
+   Doc AI job heartbeat through the outage and resume — do not terminate them.
+3. Notify affected tenants if the expected wait exceeds the tenant's configured threshold.
+4. The breaker half-opens after 30 seconds. Watch the first successes before declaring
+   recovery; a half-open breaker that closes and immediately reopens means the upstream is
+   not back.
+
+**Recovered when.** Error rate below threshold for 10 minutes and queue depth falling.
+
+## Rate-limit saturation and backlog drain
+
+**Signal.** Governor queue depth above threshold, or expected wait above 5 minutes.
+
+1. Open **Console → Usage → Throughput**. Read the current bucket fill, queue depth and
+   the number of tenants waiting.
+2. Check the routing mix. Documents routed to digitise cost more quota calls than extract
+   and add a language-model read. A mix that has drifted toward digitise is the most common
+   cause.
+3. Use the backlog projection with the scenario toggles to state a drain time before
+   promising one. Toggle `polls count toward limit` to see both projections; the
+   conservative one is what GravAI currently assumes.
+4. Raise batch priority only where an interactive queue is not being starved. The queue is
+   priority-ordered: interactive above batch above backlog.
+5. If a single tenant's batch is the cause, the fair-share rotation is already limiting it
+   to its turn. Adding workers will not help and will not hurt — the ceiling is not a
+   concurrency limit.
+
+**Recovered when.** Queue depth is falling and expected wait is under the tenant threshold.
+
+## Key rotation
+
+**Signal.** Scheduled, or a suspected exposure.
+
+1. Rotate in Key Vault first, then update the reference. Never paste a key into
+   configuration.
+2. For a per-tenant provider key, update the tenant key reference and confirm the next call
+   succeeds before revoking the old key.
+3. For API keys and MCP clients, issue the new credential, confirm `last used` moves on
+   the new one, then revoke the old one from **Console → Admin → API keys**.
+4. Data encryption keys are per tenant under a key-encryption key in Key Vault. Rotating
+   the KEK re-wraps the DEKs; it does not re-encrypt the data.
+
+**Confirmed when.** The old credential returns 401 and no error rate has moved.
+
+## Audit chain verification
+
+**Signal.** Scheduled, an `audit.anomaly` event, or an auditor's request.
+
+1. **Console → Audit explorer → Verify chain integrity**, which calls
+   `POST /v1/audit/verify`.
+2. `ok: true` with a `checked` count equal to the expected row count is a pass. Record the
+   count and the timestamp.
+3. `ok: false` returns `first_bad_seq`. Start there, not at the beginning. Pull that row
+   and its predecessor and compare the stored `prev_hash` with the predecessor's `hash`.
+4. A mismatch means a row was altered, removed or reordered. Treat it as a security
+   incident and follow the incident runbook — the trigger forbids UPDATE and DELETE, so a
+   mismatch implies access below the application layer.
+
+> If verification fails for **every** tenant at once and a migration or dialect change
+> happened recently, check the timestamp canonicalisation first. That symptom has a known
+> cause (DECISIONS.md D-010) and it is not a breach.
+
+## Prompt rollback
+
+**Signal.** Eval regression, a quality complaint, or a drift alert.
+
+1. **Console → Admin → Prompt versions.** Identify the live version and the last version
+   with all gates green.
+2. Diff them. A rollback without knowing what changed teaches nothing and will be repeated.
+3. Promote the previous version. Promotion is an approved, audited change — the approval is
+   in the chain.
+4. Re-run the agent's eval suite against the restored version and confirm the gates.
+5. Open a candidate for the fix. Do not edit the rolled-back version in place; versions are
+   immutable.
+
+## Scorecard retrain and recalibrate
+
+**Signal.** PSI above threshold on any feature, or a calibration plot drifting.
+
+1. Confirm the drift is in the population, not in an upstream extraction bug. A change in
+   how a feature is extracted looks exactly like a change in the borrowers.
+2. Retrain offline. The scorecard is never trained in the request path and never produced
+   by a language model.
+3. Publish the new version with its feature weights and calibration table, and keep the
+   previous version available for comparison.
+4. Band thresholds — GREEN below 6%, AMBER 6–15%, RED above 15% — are policy, not model
+   output. Changing them is a separate, approved decision.
+
+## Tenant onboarding
+
+1. Create the tenant with its languages, calling window, monthly budget and automation
+   flags.
+2. Assign a rate card version. A cost figure without a rate card version is not reported.
+3. Connector credentials as Key Vault references: Graviton base URL and service
+   credentials, BRE endpoint and pinned policy pack, DigiLocker partner credentials and
+   redirect URI.
+4. Telephony: CPaaS account, outbound caller ID, DLT registration. Notifications:
+   DLT-registered SMS templates and a WhatsApp BSP account.
+5. Account Aggregator: this is a commercial step, not a configuration step. Confirm the
+   agreement with a Sahamati-certified AA or TSP and FIU registration before promising AA
+   data to the tenant.
+6. Users and roles via SSO mapping. Confirm MFA is enforced at the identity provider.
+7. Run one end-to-end sandbox application and verify the audit chain afterwards.
+
+## Backup and restore drill
+
+1. Restore the most recent point-in-time backup into an isolated environment.
+2. Verify the audit chain of the restored database. A restore that breaks the chain is not
+   a successful restore.
+3. Confirm row-level security policies survived the restore, then confirm a cross-tenant
+   read still fails.
+4. Record the restore duration. That number is the recovery time objective, whatever the
+   plan says.

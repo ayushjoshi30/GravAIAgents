@@ -1,0 +1,17 @@
+[project]
+name = "gravai-evals"
+version = "0.1.0"
+description = "Golden sets, metrics, runners and red-team suites for GravAI agents"
+requires-python = ">=3.12"
+dependencies = ["gravai-core", "gravai-agents", "pydantic>=2.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gravai_evals"]
+
+[tool.uv.sources]
+gravai-core = { workspace = true }
+gravai-agents = { workspace = true }

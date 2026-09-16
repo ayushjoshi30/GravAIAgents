@@ -1,0 +1,51 @@
+export const metadata = {
+  title: "Documentation",
+  description:
+    "GravAI documentation: quickstart, architecture, agent reference, MCP connection guide, REST reference, connectors, compliance and runbooks.",
+};
+
+# Documentation
+
+GravAI is the AI agent layer for the Graviton lending platform. It is multi-tenant,
+audited end to end, and built for Indian BFSI. Agents are callable three ways:
+from Graviton over REST, from any model host over MCP, and from the GravAI console.
+
+These pages describe what exists today. Where something is an interface with a sandbox
+adapter rather than a live integration, they say so.
+
+## Start here
+
+- [Quickstart](/docs/quickstart) — run the platform with no Docker and no infrastructure, then open the console
+- [Architecture](/docs/architecture) — the three planes, Temporal, the rate governor, tenancy and the audit chain
+- [Agent reference](/docs/agent-reference) — all fourteen agents with scopes, tools, guardrails and eval gates
+
+## Connect something to it
+
+- [Connect over MCP](/docs/mcp) — the handshake, the tool catalog, role-scoped tool sets, and how to add GravAI to a model host
+- [REST reference](/docs/rest) — the `/v1` surface, authentication, error shape and pagination
+- [Connectors](/docs/connectors) — Graviton, the BRE, DigiLocker, Account Aggregator, telephony and notifications, with what each needs before it goes live
+
+## Operate it
+
+- [Compliance overview](/docs/compliance) — the regimes GravAI is built against and the controls that implement them
+- [Runbooks](/docs/runbooks) — provider outage, rate-limit saturation, key rotation, chain verification, prompt rollback and tenant onboarding
+
+## The ten rules
+
+The platform is built against ten rules. They are not aspirations; each one has tests
+behind it.
+
+1. One AI provider in runtime code, behind one adapter layer.
+2. Fixed stack — no substitutions.
+3. Multi-tenant isolation in the service layer and in the database, proven by tests.
+4. No invented numbers: cite the source or return `null` with a reason.
+5. PII minimisation; Aadhaar masked to the last 4 digits, never stored in full.
+6. Human-in-the-loop for credit decisions, deviations and adverse actions.
+7. Document Intelligence: back-off on both paths, shared quota, 10 req/min governor.
+8. Audit everything into an append-only, hash-chained log.
+9. Tests never spend provider quota.
+10. No TODOs in production paths.
+
+> Rule 4 applies to this website too. Every figure quoted on the marketing pages comes
+> from `src/lib/platform.ts`, where each one carries its source. The console labels
+> anything it could not fetch as example data.

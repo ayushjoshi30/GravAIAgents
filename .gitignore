@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+# Anchored to the repository root on purpose.
+#
+# These were `dist/` and `build/`, which git matches against a directory of that
+# name at ANY depth. That quietly swallowed `apps/web/src/app/(site)/build` and
+# `apps/web/src/components/build` — the agent sketchpad and its eight
+# components. Two things broke and neither announced itself: the files would
+# never have been committed, and Tailwind v4's automatic source detection skips
+# ignored paths, so not one class in that directory was ever compiled and the
+# page rendered unstyled with no error anywhere.
+#
+# The Python artefacts these were written for are produced at the root, so
+# anchoring costs nothing. If a package ever needs its own ignored build output,
+# give it its own anchored path rather than reintroducing a bare pattern.
+/dist/
+/build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local data
+*.db
+*.sqlite3
+gravai.db
+/data/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node / Next.js
+node_modules/
+.next/
+.next-dev/
+out/
+.turbo/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Sarvam cassettes are versioned, but raw recordings are not
+packages/gravai_sarvam/cassettes/_raw/
+
+# Local server logs
+api.out
+api.err

@@ -1,0 +1,95 @@
+export const metadata = {
+  title: "Quickstart",
+  description:
+    "Run the GravAI API and console locally with no Docker and no infrastructure: uv sync, migrate, seed, run the API on port 8000 and the web app on port 3000.",
+};
+
+# Quickstart
+
+The platform runs locally with no Docker and no infrastructure. `DATABASE_URL` defaults to
+SQLite, and the AI layer falls back to sandbox mode when no provider API key is present, so
+nothing is billed and nothing has to be installed beyond the toolchain.
+
+## 1. The API
+
+```bash
+uv sync                       # create .venv and install the workspace
+cp .env.example .env          # SQLite + SANDBOX defaults; nothing to configure
+uv run alembic upgrade head   # create the schema
+uv run python scripts/seed.py # 2 tenants, roles, users, rate card, demo applications
+uv run pytest                 # the test suite
+uv run uvicorn gravai_api.main:app --reload --port 8000
+```
+
+Then `http://localhost:8000/healthz` should return `{"status":"ok",...}` and
+`http://localhost:8000/docs` serves the OpenAPI UI.
+
+## 2. A token
+
+The console authenticates with a bearer token. In local development the API validates
+HS256 tokens signed with `AUTH_DEV_SECRET`, so no identity provider is needed:
+
+```bash
+uv run python scripts/dev_token.py --tenant acme --role underwriter
+```
+
+Copy the token that prints.
+
+## 3. The web application
+
+```bash
+cd apps/web
+npm install
+npm run dev      # http://localhost:3000
+```
+
+Open [http://localhost:3000/console/settings](/console/settings), paste the token into the
+**API token** field and save. The connection indicator in the console header turns from
+*not connected* to *connected*, and every screen switches from example data to live data.
+
+The token is held in `localStorage` in your browser and attached directly to API calls.
+There is no Next.js server route that proxies it, so it is never written to a server log.
+
+## 4. What you should see
+
+| Screen | With no token | With a valid token |
+|---|---|---|
+| Overview | Example tiles, banner says so | Application counts from `/v1/applications/summary` |
+| Applications | 48 example applications | Your tenant's applications |
+| Audit explorer | 420 example entries | Your tenant's chain, verifiable |
+| Runs, Review queue, Usage | Example data | Empty state until `/v1/runs`, `/v1/tasks` and `/v1/usage` ship |
+
+Endpoints that have not shipped yet return 404, which this console renders as a labelled
+empty state rather than an error. That is deliberate: a console that crashes when the API
+is one version behind is not a console you can operate with.
+
+## Configuration
+
+The web application reads two environment variables, both optional:
+
+```bash
+# apps/web/.env.local
+NEXT_PUBLIC_GRAVAI_API_BASE=http://localhost:8000
+NEXT_PUBLIC_GRAVAI_ENV=local
+```
+
+An operator can also override the API base from the console's Settings screen without a
+rebuild, which is useful when pointing a local console at a staging API.
+
+## Turning on PostgreSQL
+
+Row-level security is a PostgreSQL feature. On SQLite, tenant isolation rests on the
+service layer alone and the RLS tests skip rather than pretend to pass.
+
+```bash
+# in .env
+DATABASE_URL=postgresql+asyncpg://gravai:gravai@localhost:5432/gravai
+```
+
+```bash
+uv run alembic upgrade head   # now also creates the RLS policies
+uv run pytest                 # the @pytest.mark.postgres tests stop skipping
+```
+
+The console's **Admin → System status** panel reports which dialect is live and whether
+row-level security is active, so you never have to guess which mode you are in.

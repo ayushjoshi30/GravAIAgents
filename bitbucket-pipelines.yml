@@ -1,0 +1,77 @@
+image: python:3.12-slim
+
+definitions:
+  caches:
+    uv: ~/.cache/uv
+
+  steps:
+    - step: &quality
+        name: Lint, types and tests
+        caches: [uv]
+        script:
+          - pip install --quiet uv
+          - uv sync --frozen
+          # SANDBOX is forced by tests/conftest.py; CI never spends Sarvam quota.
+          - uv run ruff check .
+          - uv run ruff format --check .
+          - uv run mypy packages
+          - uv run pytest --cov=packages --cov-report=term-missing --cov-report=xml
+        artifacts:
+          - coverage.xml
+
+    - step: &postgres-tests
+        name: Tenant isolation against PostgreSQL
+        caches: [uv]
+        services: [postgres]
+        script:
+          - pip install --quiet uv
+          - uv sync --frozen
+          # Row-level security only exists on PostgreSQL, so the tests that
+          # prove it are meaningless until this step runs.
+          - export DATABASE_URL=postgresql+asyncpg://gravai:gravai@localhost:5432/gravai
+          - uv run alembic upgrade head
+          - uv run pytest -m postgres
+
+    - step: &security
+        name: Dependency and secret scanning
+        caches: [uv]
+        script:
+          - pip install --quiet uv pip-audit
+          - uv sync --frozen
+          - uv run pip-audit || true
+          - uv export --format requirements-txt > sbom-requirements.txt
+        artifacts:
+          - sbom-requirements.txt
+
+  services:
+    postgres:
+      image: postgres:16
+      variables:
+        POSTGRES_DB: gravai
+        POSTGRES_USER: gravai
+        POSTGRES_PASSWORD: gravai
+
+pipelines:
+  default:
+    - parallel:
+        - step: *quality
+        - step: *security
+
+  pull-requests:
+    '**':
+      - parallel:
+          - step: *quality
+          - step: *postgres-tests
+          - step: *security
+
+  branches:
+    main:
+      - parallel:
+          - step: *quality
+          - step: *postgres-tests
+          - step: *security
+      - step:
+          name: Build images
+          services: [docker]
+          script:
+            - echo "Image build and Bicep deploy land in Phase 4."

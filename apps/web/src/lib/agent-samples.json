@@ -1,0 +1,1120 @@
+{
+  "generated_note": "Produced by running each agent against the sandbox. Figures are real agent output, not illustrations.",
+  "agents": {
+    "doc_intelligence": {
+      "inputs": {
+        "documents": [
+          "kyc.aadhaar (1pp)",
+          "kyc.pan (1pp)",
+          "... 6 more"
+        ],
+        "application": "18302"
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Read 8 documents totalling 29 pages using 98 document intelligence calls. 0 could not be classified from their declared type.",
+        "documents": [
+          {
+            "document_id": "18302-doc-001",
+            "type": "kyc.aadhaar",
+            "confidence": 0.95,
+            "route": "extract",
+            "pages": 1,
+            "fields": {
+              "name": {
+                "value": "Ayush Joshi",
+                "citation": {
+                  "document_id": "18302-doc-001",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              },
+              "aadhaar_last4": {
+                "value": "9017",
+                "citation": {
+                  "document_id": "18302-doc-001",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              },
+              "date_of_birth": {
+                "value": "02/11/1991",
+                "citation": {
+                  "document_id": "18302-doc-001",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              }
+            },
+            "quality": {
+              "legible": true,
+              "complete": true,
+              "issues": []
+            },
+            "calls": {
+              "submit": 1,
+              "polls": 10,
+              "results": 1,
+              "llm_reads": 0,
+              "total": 12
+            }
+          },
+          {
+            "document_id": "18302-doc-002",
+            "type": "kyc.pan",
+            "confidence": 0.95,
+            "route": "extract",
+            "pages": 1,
+            "fields": {
+              "name": {
+                "value": "Ayush Joshi",
+                "citation": {
+                  "document_id": "18302-doc-002",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              },
+              "pan": {
+                "value": "AXKPJ8891L",
+                "citation": {
+                  "document_id": "18302-doc-002",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              },
+              "date_of_birth": {
+                "value": "02/11/1991",
+                "citation": {
+                  "document_id": "18302-doc-002",
+                  "page": 1,
+                  "system": null,
+                  "field": null
+                },
+                "confidence": 0.9,
+                "reason": null
+              }
+            },
+            "quality": {
+              "legible": true,
+              "complete": true,
+              "issues": []
+            },
+            "calls": {
+              "submit": 1,
+              "polls": 10,
+              "results": 1,
+              "llm_reads": 0,
+              "total": 12
+            }
+          },
+          "... 6 more"
+        ],
+        "total_pages": 29,
+        "total_calls": 98,
+        "unknown_type_ratio": 0.0
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "read:18302-doc-001",
+          "kind": "document",
+          "attempts": 1
+        },
+        {
+          "name": "read:18302-doc-002",
+          "kind": "document",
+          "attempts": 1
+        },
+        {
+          "name": "read:18302-doc-003",
+          "kind": "document",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "26.0000"
+    },
+    "bank_statement_analytics": {
+      "inputs": {
+        "transactions": [
+          "01/03/2026 NEFT SALARY CREDIT ACME LTD 85000",
+          "05/03/2026 NACH DR HDFC HOME LOAN 12000",
+          "... 11 more"
+        ],
+        "opening_balance": "52000",
+        "closing_balance": "514000"
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Classified 13 transactions. Income basis: median of 6 monthly salary credits identified by narration. Found 1 recurring obligations totalling 12000 per month and 1 bounces. Reconciliation succeeded.",
+        "accounts": [
+          {
+            "account_last4": "9012",
+            "bank": "HDFC Bank",
+            "period_from": "2026-03-01",
+            "period_to": "2026-08-05",
+            "opening_balance": "52000",
+            "closing_balance": "514000",
+            "avg_monthly_balance": null,
+            "min_balance": null
+          }
+        ],
+        "income": {
+          "salary_credits": [
+            {
+              "date": "2026-03-01",
+              "amount": "85000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            },
+            {
+              "date": "2026-04-01",
+              "amount": "85000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            },
+            {
+              "date": "2026-05-01",
+              "amount": "85000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            },
+            {
+              "date": "2026-06-01",
+              "amount": "85000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            },
+            {
+              "date": "2026-07-01",
+              "amount": "87000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            },
+            {
+              "date": "2026-08-01",
+              "amount": "87000",
+              "narration": "NEFT SALARY CREDIT ACME LTD",
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            }
+          ],
+          "monthly_net_income_median": "85000.00",
+          "income_stability_score": 0.989,
+          "months_observed": 6,
+          "basis": "median of 6 monthly salary credits identified by narration"
+        },
+        "obligations": {
+          "emis": [
+            {
+              "lender": "HDFC",
+              "amount": "12000",
+              "frequency": "monthly",
+              "first_seen": "2026-03-05",
+              "last_seen": "2026-08-05",
+              "occurrences": 5,
+              "citation": {
+                "document_id": "18302-doc-003",
+                "page": 2,
+                "system": null,
+                "field": null
+              }
+            }
+          ],
+          "total_monthly_emi": "12000"
+        },
+        "bounces": [
+          {
+            "date": "2026-06-05",
+            "amount": "12000",
+            "reason": "NACH RTN INSUFFICIENT FUNDS",
+            "citation": {
+              "document_id": "18302-doc-003",
+              "page": 2,
+              "system": null,
+              "field": null
+            }
+          }
+        ],
+        "cash_pattern": {
+          "cash_deposit_ratio": 0.0375,
+          "round_amount_credits": 1
+        },
+        "reconciled": true
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "classify_transactions",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "credit_appraisal": {
+      "inputs": {
+        "application": "18302",
+        "loan_amount": "1000000.00",
+        "tenure_months": 60,
+        "rate_pct": "11.000",
+        "verified_income": "85000.00"
+      },
+      "output": {
+        "flags": [
+          {
+            "type": "quality",
+            "detail": "Appraisal incomplete: missing collateral_value",
+            "evidence": null,
+            "citation": null,
+            "severity": "medium"
+          }
+        ],
+        "escalate": true,
+        "escalation_reason": "credit decisions require underwriter approval",
+        "reasoning_summary": "Income of Rs 85,000 a month is evidenced by six consecutive salary credits from the same employer. One recurring home-loan mandate of Rs 12,000 is visible, and one mandate was returned for insufficient funds in June 2026. FOIR and LTV were computed from the verified figures rather than the declared ones.",
+        "application_id": "18302",
+        "eligibility": {
+          "net_monthly_income": "85000.00",
+          "existing_monthly_emi": "12000",
+          "proposed_emi": "21742.42",
+          "foir": "0.3970",
+          "foir_display": "39.7%",
+          "ltv": null,
+          "ltv_display": null,
+          "formula_inputs": {
+            "emi": "P * r * (1+r)^n / ((1+r)^n - 1), r = annual rate / 1200",
+            "foir": "(existing_monthly_emi + proposed_emi) / net_monthly_income",
+            "ltv": "loan_amount / collateral_value"
+          },
+          "missing_inputs": [
+            "collateral_value"
+          ]
+        },
+        "income_build_up": [
+          {
+            "source": "salary_credits",
+            "monthly": "85000.00",
+            "evidence": "median of 6 monthly salary credits identified by narration",
+            "citation": null
+          }
+        ],
+        "cross_checks": [
+          {
+            "check": "declared income vs bank credits",
+            "result": "pass",
+            "detail": "declared ₹85,000.00, observed ₹85,000.00 (0.0% apart)"
+          },
+          {
+            "check": "statement reconciliation",
+            "result": "pass",
+            "detail": "month-end balances reconcile"
+          }
+        ],
+        "bre": {
+          "evaluation_id": "bre-88666527bd1b",
+          "policy_version": "sandbox-policy-v1 (NOT a tenant policy pack)",
+          "outcome": "pass",
+          "rules": [
+            {
+              "rule_id": "ELIG-FOIR-01",
+              "name": "Fixed Obligation to Income Ratio",
+              "result": "pass",
+              "observed": "39.7%",
+              "threshold": "at most 55.0%",
+              "plain_language": "Your total monthly loan repayments would be 39.7% of your monthly income. This lender allows up to 55.0%."
+            },
+            {
+              "rule_id": "ELIG-LTV-01",
+              "name": "Loan to Value",
+              "result": "na",
+              "observed": null,
+              "threshold": "at most 80.0%",
+              "plain_language": "No collateral was recorded, so this check does not apply."
+            },
+            {
+              "rule_id": "RISK-BUREAU-01",
+              "name": "Credit bureau score",
+              "result": "pass",
+              "observed": "712",
+              "threshold": "at least 700",
+              "plain_language": "Your credit bureau score is 712. This lender requires at least 700."
+            },
+            {
+              "rule_id": "RISK-ENQ-01",
+              "name": "Credit enquiries in last 3 months",
+              "result": "pass",
+              "observed": "3",
+              "threshold": "at most 6",
+              "plain_language": "There have been 3 credit enquiries on your file in the last three months; more than 6 is reviewed manually."
+            },
+            {
+              "rule_id": "POLICY-VINTAGE-01",
+              "name": "Employment vintage",
+              "result": "pass",
+              "observed": "28 months",
+              "threshold": "at least 6 months",
+              "plain_language": "You have been with your current employer for 28 months; this lender reviews applications below 6 months."
+            }
+          ]
+        },
+        "deviations": [],
+        "recommendation": {
+          "decision": "refer",
+          "amount": "1000000.00",
+          "tenure_months": 60,
+          "rate": "11.000",
+          "conditions": [
+            "Latest month salary slip to be collected before disbursal"
+          ]
+        },
+        "applicant_explanation": "We looked at your salary credits and your existing monthly loan repayments to work out how much of your income is already committed. One of your loan instalments was returned unpaid in June, which we have noted. An underwriter will review your application and contact you with the decision."
+      },
+      "escalated": true,
+      "escalation_reason": "credit decisions require underwriter approval",
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "write_memorandum",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.4581"
+    },
+    "risk_scoring": {
+      "inputs": {
+        "application": "18302",
+        "bureau_score": 712
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Scored by scorecard-v1-illustrative: probability 6.6%, band AMBER. Largest driver: foir. 1 features were imputed.",
+        "application_id": "18302",
+        "model_version": "scorecard-v1-illustrative",
+        "features": {
+          "foir": 0.397,
+          "ltv": null,
+          "bounces_6m": 1,
+          "income_stability": 0.989,
+          "bureau_score": 712,
+          "enquiries_3m": 3,
+          "employment_vintage_months": 28
+        },
+        "probability_30dpd_6m": 0.0658,
+        "band": "AMBER",
+        "band_thresholds": {
+          "GREEN": "below 6%",
+          "AMBER": "6% to 15%",
+          "RED": "above 15%"
+        },
+        "top_drivers": [
+          {
+            "feature": "foir",
+            "value": 0.397,
+            "contribution": 1.191,
+            "direction": "increases risk",
+            "imputed": false
+          },
+          {
+            "feature": "income_stability",
+            "value": 0.989,
+            "contribution": -1.1868,
+            "direction": "reduces risk",
+            "imputed": false
+          },
+          "... 2 more"
+        ],
+        "imputed_features": [
+          "ltv"
+        ],
+        "explanation": "The score is driven mainly by the share of income already committed to loan repayments, together with a returned mandate in the last six months. The credit bureau score and length of employment both reduce the risk."
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "explain_score",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.3639"
+    },
+    "kyc_verification": {
+      "inputs": {
+        "application": "18302",
+        "source": "DigiLocker"
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Compared the application against the digilocker record. 4 of 4 checks agree (overall 100%). Aadhaar was handled as last four digits only.",
+        "application_id": "18302",
+        "source": "digilocker",
+        "verified": true,
+        "matches": [
+          {
+            "field": "name",
+            "matched": true,
+            "score": 1.0,
+            "method": "exact",
+            "detail": "The names match exactly once honorifics and ordering are set aside."
+          },
+          {
+            "field": "date_of_birth",
+            "matched": true,
+            "score": 1.0,
+            "method": "exact",
+            "detail": "Dates of birth agree."
+          },
+          "... 2 more"
+        ],
+        "aadhaar_last4": "9017",
+        "pan": "AXKPJ8891L",
+        "pan_entity_type": "individual",
+        "overall_score": 1.0
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "cross_check_identity",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "aa_data": {
+      "inputs": {
+        "customer_ref": "cust-18302",
+        "purpose": "Loan underwriting"
+      },
+      "output": {
+        "flags": [
+          {
+            "type": "quality",
+            "detail": "Data came from the sandbox Account Aggregator. A licensed AA or TSP arrangement is required before this is real bank data.",
+            "evidence": null,
+            "citation": null,
+            "severity": "high"
+          }
+        ],
+        "escalate": true,
+        "escalation_reason": "Sandbox Account Aggregator data must not be underwritten",
+        "reasoning_summary": "Fetched 13 transactions across 1 account(s) under consent consent-3cd5fd5b9df09abd for assessing a loan application. Structured at source, so no extraction was needed — avoiding roughly 24 document API calls.",
+        "customer_ref": "cust-18302",
+        "live_data": false,
+        "source": "sandbox",
+        "consent": {
+          "consent_id": "consent-3cd5fd5b9df09abd",
+          "status": "ACTIVE",
+          "purpose_code": "105",
+          "purpose_text": "Assessing a loan application",
+          "data_range_from": "2025-09-19",
+          "data_range_to": "2026-09-14",
+          "expires_on": "2026-10-14",
+          "retention_expires_on": "2027-03-13",
+          "fetches_used": 1,
+          "fetches_permitted": 1
+        },
+        "accounts": [
+          {
+            "masked_account_number": "XXXXXXXX9012",
+            "fip_name": "HDFC Bank",
+            "ifsc": "HDFC0001234",
+            "account_type": "SAVINGS",
+            "transaction_count": 13,
+            "opening_balance": "52000",
+            "closing_balance": "514000"
+          }
+        ],
+        "transaction_count": 13,
+        "transactions": [
+          {
+            "date": "2026-03-01",
+            "narration": "NEFT SALARY CREDIT ACME LTD",
+            "amount": "85000",
+            "direction": "credit",
+            "balance": null,
+            "document_id": null,
+            "page": null
+          },
+          {
+            "date": "2026-03-05",
+            "narration": "NACH DR HDFC HOME LOAN",
+            "amount": "12000",
+            "direction": "debit",
+            "balance": null,
+            "document_id": null,
+            "page": null
+          },
+          "... 11 more"
+        ],
+        "documents_avoided": 1,
+        "api_calls_avoided": 24
+      },
+      "escalated": true,
+      "escalation_reason": "Sandbox Account Aggregator data must not be underwritten",
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "fetch_fi_data",
+          "kind": "connector",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "case_allocation": {
+      "inputs": {
+        "cases": [
+          "C-1001 8dpd 21742",
+          "C-1002 23dpd 35347",
+          "... 3 more"
+        ]
+      },
+      "output": {
+        "flags": [],
+        "escalate": true,
+        "escalation_reason": "1 case(s) need a human conversation rather than an automated one",
+        "reasoning_summary": "Ranked 5 cases. 3 suppressed (dispute, do-not-call, live promise or attempt limit). 1 routed to a human.",
+        "allocations": [
+          {
+            "case_id": "C-1003",
+            "priority": 4.1,
+            "next_action": "human_call",
+            "channel": "voice",
+            "language": "ta-IN",
+            "reason": "78 days past due, 99966 overdue, 2 broken promise(s), 4 bounce(s) in six months.",
+            "suppressed": false,
+            "suppression_reason": null,
+            "earliest_contact_local": "08:00-19:00 IST",
+            "requires_human": true
+          },
+          {
+            "case_id": "C-1001",
+            "priority": 1.22,
+            "next_action": "digital_nudge",
+            "channel": "whatsapp",
+            "language": "en-IN",
+            "reason": "8 days past due, 21742 overdue, 0 broken promise(s), 1 bounce(s) in six months.",
+            "suppressed": false,
+            "suppression_reason": null,
+            "earliest_contact_local": null,
+            "requires_human": false
+          },
+          "... 3 more"
+        ],
+        "total_cases": 5,
+        "suppressed_cases": 3,
+        "contactable_cases": 2,
+        "total_overdue": "191065"
+      },
+      "escalated": true,
+      "escalation_reason": "1 case(s) need a human conversation rather than an automated one",
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "rank_portfolio",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "smart_mandate": {
+      "inputs": {
+        "cases": [
+          "C-1001",
+          "C-1002",
+          "... 3 more"
+        ]
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Planned 2 presentments totalling 35952; skipped 3. Every plan carries a pre-debit notice at least 24 hours ahead and respects the mandate cap.",
+        "plans": [
+          {
+            "case_id": "C-1001",
+            "present_on": "2026-10-02",
+            "amount": "21742",
+            "pre_debit_notice_on": "2026-10-01",
+            "rationale": "Salary typically lands on day 1; presenting 1 day(s) after, inside a 3-day window, with notice 24h ahead.",
+            "capped": false
+          },
+          {
+            "case_id": "C-1004",
+            "present_on": "2026-10-08",
+            "amount": "14210",
+            "pre_debit_notice_on": "2026-10-07",
+            "rationale": "Salary typically lands on day 7; presenting 1 day(s) after, inside a 3-day window, with notice 24h ahead.",
+            "capped": false
+          }
+        ],
+        "skipped": [
+          {
+            "case_id": "C-1002",
+            "reason": "A promise to pay by 17/09/2026 is live; presenting now would pre-empt it."
+          },
+          {
+            "case_id": "C-1003",
+            "reason": "No active mandate is registered; presentment is not possible."
+          },
+          "... 1 more"
+        ],
+        "total_to_present": "35952"
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "plan_presentments",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "voice_collections": {
+      "inputs": {
+        "case": "C-1001",
+        "language": "en-IN",
+        "at": "11:30 IST"
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Call permitted for C-1001 in en-IN. 5 of 5 lines cleared the conduct check. Outcome: promise_to_pay.",
+        "case_id": "C-1001",
+        "permitted": true,
+        "outcome": "promise_to_pay",
+        "state_reached": "close",
+        "language": "en-IN",
+        "script": [
+          {
+            "state": "greet_and_disclose",
+            "speaker": "agent",
+            "text": "Good morning. This is an automated assistant calling on behalf of your lender. This call is recorded.",
+            "blocked": false,
+            "blocked_reason": null
+          },
+          {
+            "state": "verify_identity",
+            "speaker": "agent",
+            "text": "For security, could you confirm your date of birth please?",
+            "blocked": false,
+            "blocked_reason": null
+          },
+          "... 3 more"
+        ],
+        "promise": {
+          "due_on": "2026-09-28",
+          "amount": "21742",
+          "confirmed_back": true
+        },
+        "compliance": {
+          "disclosed_ai": true,
+          "disclosed_recording": true,
+          "identified_lender": false,
+          "identity_verified": true,
+          "within_window": true,
+          "language": "en-IN",
+          "prohibited_blocked": 0
+        },
+        "handoff_required": false,
+        "earliest_retry_utc": null
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "write_call_script",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.4506"
+    },
+    "speech_analytics": {
+      "inputs": {
+        "transcript_lines": [
+          "Good morning. This is an automated assistant calling on behalf of your lender. This call is recorded.",
+          "For security, could you confirm your date of birth please?",
+          "... 3 more"
+        ]
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Scored call C-1001-call at 83.3% (25/30). 0 conduct breach(es), 0 missing disclosure(s).",
+        "call_id": "C-1001-call",
+        "language": "en-IN",
+        "scores": {
+          "disclosure": 5,
+          "identity_verification": 4,
+          "courtesy": 5,
+          "accuracy_of_information": 4,
+          "objection_handling": 3,
+          "closure": 4
+        },
+        "score_percent": 83.3,
+        "compliance_violations": [],
+        "missing_disclosures": [],
+        "borrower_intent": "The borrower wanted more time to pay.",
+        "coaching_notes": [
+          "Confirm the promised date back to the borrower before closing.",
+          "Offer the payment link explicitly rather than waiting to be asked."
+        ],
+        "unverified_quotes_dropped": 0
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "score_call",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.4647"
+    },
+    "onboarding_assistant": {
+      "inputs": {
+        "application": "18303",
+        "question": "What is happening with my application?"
+      },
+      "output": {
+        "flags": [],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Answered a status question on 18303 (status pending_documents, 2 outstanding requirement(s)). Handoff: False.",
+        "application_id": "18303",
+        "language": "English",
+        "answer": "Your application is with our credit team. Two documents are still outstanding, and once we receive them the review continues. You can upload them from the link in your application email.",
+        "status_explained": "It is being reviewed, and we are waiting on documents from you.",
+        "outstanding_requirements": [
+          "Latest 6 months bank statement",
+          "Property valuation report"
+        ],
+        "suggested_actions": [
+          {
+            "label": "Upload the outstanding documents",
+            "detail": "Your latest bank statement and the valuation report."
+          }
+        ],
+        "handoff_required": false,
+        "handoff_topic": null
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "answer_query",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.4914"
+    },
+    "msme_underwriting": {
+      "inputs": {
+        "gst_returns": "12 monthly returns",
+        "bank_credits": "6000000",
+        "itr": "5800000"
+      },
+      "output": {
+        "flags": [
+          {
+            "type": "quality",
+            "detail": "50% of inbound value comes from a single counterparty; losing it would remove most of the revenue",
+            "evidence": null,
+            "citation": null,
+            "severity": "medium"
+          }
+        ],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Cross-verified 12 GST return(s) against bank credits and declared income. 1 discrepancy flag(s). Underwriting turnover taken as the most conservative source.",
+        "application_id": "M-1",
+        "gstin": "27AAPFU0939F1ZV",
+        "gstin_valid": true,
+        "turnover": {
+          "gst_annual": "6000000",
+          "bank_credits_annual": "6000000",
+          "itr_declared": "5800000",
+          "bank_to_gst_ratio": 1.0,
+          "itr_to_gst_ratio": 0.9667
+        },
+        "monthly_gst_turnover": {
+          "2026-01": "500000",
+          "2026-02": "500000",
+          "2026-03": "500000",
+          "2026-04": "500000",
+          "2026-05": "500000",
+          "2026-06": "500000",
+          "2026-07": "500000",
+          "2026-08": "500000",
+          "2026-09": "500000",
+          "2026-10": "500000",
+          "2026-11": "500000",
+          "2026-12": "500000"
+        },
+        "seasonality_ratio": 1.0,
+        "top_counterparties": [
+          {
+            "name": "Bharat Retail",
+            "inbound": "3000000",
+            "outbound": "0"
+          },
+          {
+            "name": "Sunrise Distributors",
+            "inbound": "3000000",
+            "outbound": "0"
+          }
+        ],
+        "concentration_risk": 0.5,
+        "circular_counterparties": [],
+        "assessed_annual_turnover": "5800000",
+        "basis": "The most conservative of GST, bank credits and declared income."
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "cross_verify_turnover",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "customer_data_intelligence": {
+      "inputs": {
+        "customers": 9,
+        "purpose": "marketing"
+      },
+      "output": {
+        "flags": [
+          {
+            "type": "quality",
+            "detail": "3 customer(s) excluded for want of a live 'marketing' consent. Data collected to underwrite may not be used to market.",
+            "evidence": null,
+            "citation": null,
+            "severity": "low"
+          }
+        ],
+        "escalate": false,
+        "escalation_reason": null,
+        "reasoning_summary": "Evaluated 6 of 9 customers holding a live 'marketing' consent against 4 published rules. 6 fell into at least one segment. No protected attribute is used by any rule.",
+        "population": 9,
+        "consented": 6,
+        "excluded_no_consent": 3,
+        "segments": [
+          {
+            "segment": "top_up_ready",
+            "rule": "On book 12 months or more, at least 40% repaid, no bounces in 12 months, not past due, and not in the RED risk band.",
+            "suggested_action": "Offer a top-up at existing terms.",
+            "customers": [
+              "C1",
+              "C2",
+              "C4",
+              "C5",
+              "C7",
+              "C8"
+            ],
+            "size": 6
+          },
+          {
+            "segment": "pre_delinquency_watch",
+            "rule": "Currently up to date, but either two or more bounces in 12 months, or five or more credit enquiries in the last three months.",
+            "suggested_action": "Pre-emptive contact before the account falls due.",
+            "customers": [],
+            "size": 0
+          },
+          "... 2 more"
+        ],
+        "unsegmented": 0
+      },
+      "escalated": false,
+      "escalation_reason": null,
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "apply_segment_rules",
+          "kind": "deterministic",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0"
+    },
+    "ops_research": {
+      "inputs": {
+        "question": "What does the document pipeline cost and can it keep up?"
+      },
+      "output": {
+        "flags": [],
+        "escalate": true,
+        "escalation_reason": "The month's document volume needs 1379.5 hours against 176 business hours available; this is a capacity decision",
+        "reasoning_summary": "Status polling is about three quarters of all request volume, so measuring documents rather than requests understates the load by roughly a factor of twelve. The reasoning model is a small and fixed share, independent of how many documents a file contains. The backlog estimate turns entirely on whether status polls count against the rate limit, which is not documented and should be confirmed with the vendor before any capacity commitment.",
+        "question": "What does the document pipeline cost and can it keep up?",
+        "period": "current month",
+        "assumptions": {
+          "applications_per_month": 3533,
+          "documents_per_month": 68976,
+          "pages_per_document": "3.0",
+          "reasoning_calls_per_application": 24,
+          "job_seconds": 30.0,
+          "polls_per_document": 10,
+          "rate_limit_per_minute": 10,
+          "polls_count_toward_limit": true
+        },
+        "endpoints": [
+          {
+            "endpoint": "docai.extract",
+            "label": "Document extraction (submit)",
+            "per_month": 68976,
+            "per_working_day": 3135,
+            "per_minute": 6.53
+          },
+          {
+            "endpoint": "docai.status",
+            "label": "Document job status (polling)",
+            "per_month": 689760,
+            "per_working_day": 31353,
+            "per_minute": 65.32
+          },
+          "... 4 more"
+        ],
+        "total_calls_per_month": 919570,
+        "poll_calls_per_month": 689760,
+        "poll_share": 0.7501,
+        "throughput": {
+          "quota_units_per_document": 12,
+          "hours_required_per_month": 1379.5,
+          "business_hours_available": 176,
+          "utilisation": 7.8382,
+          "fits_in_business_hours": false
+        },
+        "routing_scenarios": [
+          {
+            "label": "0% digitised",
+            "total_calls_per_month": 919570,
+            "delta_vs_baseline": 0,
+            "note": "Baseline: all documents extracted."
+          },
+          {
+            "label": "60% digitised",
+            "total_calls_per_month": 960956,
+            "delta_vs_baseline": 41386,
+            "note": "Digitise returns text, so each digitised document also costs one model call to read it."
+          },
+          "... 1 more"
+        ],
+        "backlog_scenarios": [
+          {
+            "assumption": "status polls count against the rate limit",
+            "documents": 2644052,
+            "days_continuous": 2203.4,
+            "business_days": 6610.1
+          },
+          {
+            "assumption": "status polls are free",
+            "documents": 2644052,
+            "days_continuous": 183.6,
+            "business_days": 550.8
+          }
+        ],
+        "observed_cost_inr": null,
+        "headline": "Throughput is the binding constraint, not price: the month's document volume needs far more capacity than the rate ceiling provides in business hours.",
+        "open_questions": [
+          "Do Document Intelligence status polls count against the rate limit? The answer changes the backlog estimate from 183.6 days to 2203.4.",
+          "Is the per-minute limit uniform across plan tiers, and is a committed-rate arrangement available at this volume?",
+          "... 1 more"
+        ]
+      },
+      "escalated": true,
+      "escalation_reason": "The month's document volume needs 1379.5 hours against 176 business hours available; this is a capacity decision",
+      "validation_ok": true,
+      "steps": [
+        {
+          "name": "build_volume_model",
+          "kind": "deterministic",
+          "attempts": 1
+        },
+        {
+          "name": "write_report",
+          "kind": "llm",
+          "attempts": 1
+        }
+      ],
+      "cost_inr": "0.4464"
+    }
+  }
+}

@@ -1,0 +1,111 @@
+export const metadata = {
+  title: "Architecture",
+  description:
+    "GravAI architecture: three planes, Temporal workflows, the rate governor, the data model, events and the hash-chained audit log.",
+};
+
+# Architecture
+
+## Three planes
+
+```
+INTERFACE   apps/mcp (remote MCP, Streamable HTTP, OAuth 2.1)
+            apps/api (REST /v1, OpenAPI, webhooks)
+            apps/web (marketing, docs, console)
+                       │  validate · authorise · audit
+PLATFORM    Temporal workflows and activities · Redis rate governor
+            PostgreSQL (RLS, outbox) · Blob storage · cost and volume ledger
+            OpenTelemetry → Datadog · Langfuse traces · Key Vault
+                       │  durable, resumable, governed
+AGENT       gravai_agents   14 agents = prompt + tools + schema + guardrails
+            ai adapters     model · documents · speech · translation
+            gravai_connectors  graviton · bre · digilocker · aa · telephony
+```
+
+MCP and REST are thin. They validate the request, authorise it against the caller's
+scopes, write an audit row, and call the service layer. No business logic lives at the
+edge, which is what makes an agent behave identically regardless of which surface invoked
+it.
+
+## Temporal
+
+Task queues are split by resource so a slow dependency cannot starve a fast one:
+`documents`, `model`, `speech`, `connectors`, `agents`, and
+`voice-realtime` with dedicated low-concurrency workers.
+
+Workflow ids are `{tenant_id}:{agent_id}:{application_id|case_id|call_id}:{request_id}`,
+which makes starts idempotent — a duplicate is rejected by Temporal rather than by
+application code that has to remember to check.
+
+Retry policy for AI activities: initial 2 s, backoff factor 2.0, maximum 60 s, six
+attempts, non-retryable on `ProviderAuthError` and `SchemaViolation`. Retrying either of
+those is spending quota to fail again.
+
+Human approvals are workflow signals — `approve`, `reject`, `request_info` — with SLA
+timer reminders at 24 and 72 hours and query handlers for status. A projection worker
+writes `agent_run` and `agent_step` rows that the console reads.
+
+## The rate governor
+
+Document Intelligence is capped at 10 requests per minute, uniformly across plan
+tiers, shared by the extract and digitise paths. The governor is a token bucket with
+continuous refill — one token per six seconds rather than ten at the top of the minute,
+which avoids a thundering herd.
+
+Waiters are served by weighted round-robin across tenants, not in arrival order. One
+tenant is 48% of applications and 62% of documents; FIFO would let that tenant's month-end
+batch starve the other seventeen. The rotation advances only after an actual release: an
+earlier version rotated on every failed poll, which handed each newly refilled token to
+whoever happened to be at the head of the ring.
+
+`acquire()` parks callers on a future and is woken by a pump task. It never busy-waits, and
+long waits are wrapped in a Temporal activity heartbeat.
+
+## Data model
+
+Every table carries `tenant_id` and a `tenant_isolation` row-level security policy.
+
+`tenant` · `user` · `role` / `user_role` · `api_key` · `mcp_client` · `application` ·
+`borrower` (PII columns encrypted with a per-tenant data key; masked views) · `document` ·
+`page` · `extraction` · `agent_run` · `agent_step` · `decision` · `deviation` · `task` ·
+`case` · `mandate` · `call` · `transcript` · `consent` · `audit_log` · `cost_ledger` ·
+`rate_card` · `prompt_version` · `eval_result` · `webhook` / `webhook_delivery` · `outbox`.
+
+Each table has a retention class — `hot`, `warm`, `purge_after_days` — that drives the
+purge jobs.
+
+## Events
+
+A transactional outbox feeds Redis Streams. Webhooks fan out from these events:
+
+`application.received` · `document.classified` · `extraction.completed` · `cam.produced` ·
+`decision.pending_review` · `decision.approved` · `deviation.raised` · `risk.scored` ·
+`case.allocated` · `mandate.planned` · `call.completed` · `call.flagged` ·
+`usage.threshold` · `audit.anomaly`
+
+## The audit chain
+
+`audit_log` is append-only: a database trigger forbids UPDATE and DELETE. Each row stores
+`prev_hash`, the hash of the previous row **for the same tenant**, and its own `hash`.
+
+The chain is per tenant rather than global. A global chain would serialise writes across
+all tenants and leak activity volume between them.
+
+Timestamps are canonicalised before hashing rather than passed through `isoformat()`.
+PostgreSQL `timestamptz` returns an aware datetime and SQLite returns a naive one, so the
+digest computed on write did not match the digest recomputed on read, and every chain
+failed verification after a reload. A failing test found it. The hash format is now frozen
+and versioned with the chain.
+
+`POST /v1/audit/verify` recomputes the chain from the genesis hash and returns
+`{ ok, checked, first_bad_seq, reason }`. Naming the first bad sequence number is what
+makes the log evidence rather than a list — an investigation starts at the right row.
+
+## Observability
+
+OpenTelemetry spans are named `gravai.<agent>.<step>` and carry tenant, run, model, tokens,
+cost and a cassette flag. Langfuse traces every model call with its prompt version and
+redacted inputs.
+
+Service level objectives: REST p95 under 300 ms for non-agent endpoints, agent run success
+at or above 99%, voice turn p50 at or under 1.5 seconds.
