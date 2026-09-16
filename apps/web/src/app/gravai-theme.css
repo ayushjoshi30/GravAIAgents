@@ -198,7 +198,16 @@
   .gv-node {
     position: relative;
     background: #fff;
-    border: 1.5px solid var(--color-line-strong);
+    /* The edge colour comes from `--node-edge` when a node sets one, which the
+       Studio canvas does to tint each card with its own hue. It is read here,
+       inside the same layer and BEFORE the state rules below, rather than being
+       applied as a utility on the element: a Tailwind `border-[...]` sits in
+       `@layer utilities`, which wins against everything in this layer, and it
+       would therefore have painted the hue over `.gv-node-failed` and
+       `.gv-node-selected` — hiding the three states that actually change what
+       someone does next behind decoration. Written this way, a failed node is
+       red no matter what hue its type carries. */
+    border: 1.5px solid var(--node-edge, var(--color-line-strong));
     border-radius: var(--gv-radius-node);
     text-align: left;
     color: var(--color-ink);

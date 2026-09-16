@@ -63,6 +63,22 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
   const pathname = usePathname() ?? "/console";
   const connection = useConnection();
 
+  // The Studio is the only console route that is an application rather than a
+  // document. Runs, Usage and Audit are pages a reader scrolls as a whole, and
+  // the padded, centred, capped main below is exactly right for them; a canvas
+  // is not a page, and has to own the viewport and scroll inside its own panels
+  // instead. This single boolean is the whole difference — it changes the class
+  // on `<main>` and whether the children are wrapped in the reading-width box,
+  // and nothing else in the shell.
+  //
+  // It is read from the pathname rather than passed down as a prop because the
+  // console layout that renders this shell is a server component with no
+  // pathname to test, and any layout nested under /console/studio would sit
+  // *below* this component and so would have nothing to pass upward. Sniffing
+  // the route here is the shorter honest option, and `isActive` already knows
+  // how to match a route's own subtree.
+  const studioRoute = isActive(pathname, "/console/studio");
+
   // `reachable` is tri-state on purpose. While the first health check is in
   // flight nobody knows, and `undefined` says so; collapsing that to `false`
   // would flash "Not reachable" at every user on every page load.
@@ -104,7 +120,20 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
   const connectionTitle = `${connectionPill.why} API ${API_BASE} (${API_ENV}); last checked ${checked}.`;
 
   return (
-    <div className="min-h-screen bg-white md:flex">
+    // The floor under the whole shell. A document route keeps `100vh`, which is
+    // what it has always had: for a page that scrolls anyway the unit only
+    // decides how far the white reaches on a short page, and leaving it alone
+    // keeps the other ten routes byte-for-byte what they were.
+    //
+    // The Studio cannot keep it. Its main is sized in `dvh`, and on a phone
+    // browser `100vh` is the *tallest* the viewport ever gets — taller than
+    // `100dvh` by exactly the height of the address bar. A `100vh` floor under
+    // a `100dvh` box makes the document an address bar taller than the window
+    // and hands the one route that promises "no page scroll, the panes scroll
+    // themselves" a stray inch of page scroll on every phone. Matching the unit
+    // to the box is what makes the promise true; on a desktop the two units are
+    // the same number, so nothing there moves.
+    <div className={studioRoute ? "min-h-[100dvh] bg-white md:flex" : "min-h-screen bg-white md:flex"}>
       <a href="#console-main" className="gv-skip">
         Skip to console content
       </a>
@@ -114,7 +143,11 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
           sidebar is not on the page until it is asked for — and whether this
           console is connected is the one thing a reader should not have to open
           a menu to find out. */}
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line-2 bg-white px-4 md:hidden">
+      <header
+        className={`sticky top-0 z-30 h-14 items-center gap-2 border-b border-line-2 bg-white px-4 md:hidden ${
+          studioRoute ? "hidden" : "flex"
+        }`}
+      >
         <Link href="/console" className="flex shrink-0 items-center hover:no-underline" aria-label="Console home">
           <GravAIWordmark height={22} />
         </Link>
@@ -137,11 +170,37 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
         </div>
       </header>
 
+      {/* The sidebar. On a phone it is a disclosure that opens above the page;
+          from `md` up it is a column beside the main area, stuck to the top of
+          the viewport with the nav list scrolling inside it, so a short window
+          never hides Settings at the bottom of eleven items.
+
+          Its height is `100dvh` rather than `100vh` for the same reason the
+          Studio's main is: on a viewport whose chrome slides in and out — a
+          tablet wide enough to reach `md` — `100vh` is the tallest the viewport
+          ever gets, and a sidebar that tall makes the document taller than the
+          window and gives every route a stray inch of scroll. On a desktop the
+          two units are the same number, so nothing else moves. */}
       <div
         id="console-nav"
         className={`${
-          navOpen ? "block" : "hidden"
-        } border-b border-line-2 bg-surface-2 md:sticky md:top-0 md:flex md:h-screen md:w-[252px] md:shrink-0 md:flex-col md:border-r md:border-b-0`}
+          // THE STUDIO GETS THE WHOLE SCREEN.
+          //
+          // Every other console route keeps the sidebar, because moving between
+          // eleven destinations is most of what a person does in a console. The
+          // Studio is not that: it is a canvas, and the 252px the nav costs is
+          // 252px of workspace on a laptop — about a fifth of the width, or two
+          // node cards. Someone in here is building one thing, not navigating.
+          //
+          // Hidden rather than unmounted, so the nav's own state and the
+          // command palette it hosts stay alive and the sidebar reappears
+          // instantly on the way out. The way back is a link in the Studio's own
+          // top bar; a full-screen route with no exit is a trap, and this one
+          // must never be.
+          studioRoute ? "hidden" : navOpen ? "block" : "hidden"
+        } border-b border-line-2 bg-surface-2 ${
+          studioRoute ? "" : "md:sticky md:top-0 md:flex md:h-[100dvh] md:w-[252px] md:shrink-0 md:flex-col md:border-r md:border-b-0"
+        }`}
       >
         <div className="hidden items-center gap-2 px-4 pt-4 pb-3 md:flex">
           <Link href="/console" className="flex shrink-0 items-center hover:no-underline" aria-label="Console home">
@@ -225,9 +284,49 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
         // left in place on purpose: it is how a keyboard user sees that the
         // skip actually moved them.
         tabIndex={-1}
-        className="box-border min-w-0 flex-1 px-[clamp(16px,3vw,32px)] pt-[clamp(16px,3vw,32px)] pb-12"
+        className={
+          studioRoute
+            ? // The application treatment. No padding, because a canvas is
+              // drawn to its own edges and the panes beside it carry their own;
+              // a locked height, because the Studio lays out three panes that
+              // each scroll internally and it cannot do that against a box that
+              // is free to grow downward; and `overflow-hidden`, so a pane that
+              // overflows scrolls itself rather than lengthening the document.
+              //
+              // `dvh` rather than `vh` so that a phone's address bar sliding
+              // into view shortens the canvas instead of cropping the bottom of
+              // it — with `vh` the last inch of the canvas, and whatever sits
+              // along it, lives permanently under the browser's own chrome.
+              //
+              // The 3.5rem taken off below `md` is the phone header's `h-14`.
+              // That header is sticky rather than fixed, so it occupies real
+              // layout height above this element; taking it off here is what
+              // makes the document exactly one viewport tall, which in turn is
+              // what keeps the header — and the menu button that reveals the
+              // nav — on screen instead of pushed off the top by a main that
+              // was a header taller than the window. From `md` up the header is
+              // gone and the main sits beside the sidebar, so it takes the
+              // whole viewport.
+              //
+              // `min-h-[560px]` is the floor /build already uses, and it is
+              // what keeps the lock from becoming a trap. The Studio spends a
+              // fixed share of this box on a toolbar that wraps to three rows
+              // on a phone and on the problems footer; below about 560px the
+              // remainder is smaller than the test panel's own input block, and
+              // because this box clips, the Run button it ends with was drawn
+              // outside the clip with no page scroll left to reach it. Under
+              // the floor the box stops shrinking, the document grows past the
+              // window instead, and the page scrolls to whatever the panes
+              // could not fit — which is what a short window did before this
+              // route was locked to the viewport at all.
+              "box-border h-[calc(100dvh-3.5rem)] min-h-[560px] min-w-0 flex-1 overflow-hidden md:h-[100dvh]"
+            : "box-border min-w-0 flex-1 px-[clamp(16px,3vw,32px)] pt-[clamp(16px,3vw,32px)] pb-12"
+        }
       >
-        <div className="mx-auto w-full max-w-[1320px]">{children}</div>
+        {/* A document is centred and capped, because a line of prose or a table
+            of runs is unreadable at 2,000px wide. An application is given the
+            whole main and decides for itself what to do with the width. */}
+        {studioRoute ? children : <div className="mx-auto w-full max-w-[1320px]">{children}</div>}
       </main>
 
       <CommandPalette open={paletteOpen} onClose={closePalette} />

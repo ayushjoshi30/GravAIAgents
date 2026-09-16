@@ -22,6 +22,7 @@ import { DeployPanel } from "@/components/studio/DeployPanel";
 import { NodeLibrary } from "@/components/studio/NodeLibrary";
 import { TestPanel } from "@/components/studio/TestPanel";
 import { WorkflowInspector } from "@/components/studio/WorkflowInspector";
+import { GravAIWordmark } from "@/brand/Logo";
 import { Icon } from "@/components/icons/AgentIcon";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/Field";
@@ -60,6 +61,14 @@ export default function StudioPage() {
   const [problems, setProblems] = useState<StudioProblem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("build");
+  // Both side panes can be put away, because on a laptop they cost 248 + 300 of
+  // about 1280 — nearly half the width — and someone laying out a wide graph
+  // wants that back. They are remembered per session rather than persisted: a
+  // hidden panel is a temporary state for a particular task, and having the
+  // studio open one day with its library missing and no memory of closing it is
+  // worse than reopening it each visit.
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   //: What was last written to the server, so the page can say when the canvas
@@ -388,25 +397,75 @@ export default function StudioPage() {
 
   if (!token) {
     return (
-      <div className="flex h-[70vh] items-center justify-center px-6">
+      // The shell now hands this route a box exactly one viewport tall with no
+      // padding of its own, so the no-token card centres in that box and brings
+      // its own inset. It scrolls rather than clips because on a short window
+      // the card is the only thing here and losing the link to Settings would
+      // leave a reader with no way out of the state the card is describing.
+      <div className="gv-scroll-y flex h-full items-center justify-center overflow-y-auto p-6">
         <div className="gv-card max-w-md p-6 text-center">
           <h1 className="gv-page-title">Agent Studio</h1>
           <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
             The studio reads its node library and runs workflows through the API, so it cannot
             draw anything without a token. Add one and this page will load its library.
           </p>
-          <Link href="/console/settings" className="gv-link mt-3 inline-block text-[13px]">
-            Open Settings
-          </Link>
+          {/* Two ways out, because this route hides the console sidebar and
+              this branch renders instead of the top bar that carries the other
+              exit. Without the second link a reader arriving here with no token
+              would be on a full-screen page with no navigation at all — and the
+              one thing they might want, if they cannot add a token, is simply
+              to leave. */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+            <Link href="/console/settings" className="gv-link text-[13px]">
+              Open Settings
+            </Link>
+            <Link href="/console" className="gv-link text-[13px] text-ink-2">
+              Back to the console
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-var(--gv-console-header,64px))] min-h-0 flex-col">
+    // The studio fills the height the console shell gives it, which for this
+    // one route is the viewport — or the shell's 560px floor when the window is
+    // shorter than that, in which case the page scrolls rather than clipping
+    // whatever the panes could not fit. It used to subtract a `--gv-console-header`
+    // that no stylesheet in this app ever defines, so the fallback in the
+    // expression was the only value it ever had: the canvas was cut short by a
+    // guessed 64px on desktop, where the console has no header above it at all.
+    // `h-full` asks the parent instead of guessing, and the parent now knows.
+    //
+    // Everything below is `shrink-0` except the three columns, so the canvas is
+    // what grows when the window does and the bars stay the height they need.
+    // `overflow-hidden` keeps a long panel inside its own scroller rather than
+    // letting it push the toolbar off the top of the screen.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* --- header ---------------------------------------------------- */}
-      <header className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
+        {/* The way out.
+            
+            The Studio is the one console route that hides the sidebar, because
+            a canvas wants the 252px more than a person in a canvas wants a nav.
+            That makes this link load-bearing rather than decorative: it is the
+            only exit, and a full-screen route you cannot leave is a trap.
+            
+            It carries the wordmark as well as the word, so the top-left corner
+            still behaves the way the top-left corner of every other console
+            page does — the place you press to get back out. */}
+        <Link
+          href="/console"
+          aria-label="Leave the Studio and return to the console"
+          className="-ml-1 flex shrink-0 items-center gap-2 rounded-[6px] px-1.5 py-1 text-ink-3 hover:bg-surface-2 hover:text-ink hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+        >
+          <Icon name="chevron" size={13} className="rotate-180" />
+          <GravAIWordmark height={19} />
+        </Link>
+
+        <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line" />
+
         <div className="min-w-0">
           {/* `gv-page-title` is drawn at 26–32px, which is right for a document
               page and wrong here: this header is a tool bar sitting on top of a
@@ -486,6 +545,42 @@ export default function StudioPage() {
           <Button size="sm" variant="secondary" onClick={undo} aria-label="Undo">
             <Icon name="chevron" size={12} className="rotate-90" />
           </Button>
+          {/* Put a pane away, and get it back.
+              
+              Both live here rather than only as an X on each panel, because a
+              control that can only close is half a control: once the library is
+              gone there is nothing left on screen to press to bring it back,
+              and a person who hid it by accident has no way to undo that
+              without knowing to reload. These stay put whichever state the
+              panes are in.
+              
+              `aria-pressed` rather than swapping the label, so a screen reader
+              hears one stable control with a state instead of two controls that
+              replace each other. Shown only in BUILD, where the panes exist. */}
+          {mode === "build" ? (
+            <>
+              <Button
+                size="sm"
+                variant={libraryOpen ? "secondary" : "ghost"}
+                onClick={() => setLibraryOpen((open) => !open)}
+                aria-pressed={libraryOpen}
+                title={libraryOpen ? "Hide the node library" : "Show the node library"}
+                className="hidden lg:inline-flex"
+              >
+                Nodes
+              </Button>
+              <Button
+                size="sm"
+                variant={panelOpen ? "secondary" : "ghost"}
+                onClick={() => setPanelOpen((open) => !open)}
+                aria-pressed={panelOpen}
+                title={panelOpen ? "Hide the workflow panel" : "Show the workflow panel"}
+                className="hidden lg:inline-flex"
+              >
+                Workflow
+              </Button>
+            </>
+          ) : null}
           <Button size="sm" variant="primary" onClick={() => void save()} disabled={busy === "save"}>
             {busy === "save" ? "Saving…" : "Save"}
           </Button>
@@ -493,21 +588,46 @@ export default function StudioPage() {
       </header>
 
       {libraryError ? (
-        <p className="border-b border-red bg-red-tint px-4 py-2 text-[12.5px] text-red-ink">
+        <p className="shrink-0 border-b border-red bg-red-tint px-4 py-2 text-[12.5px] text-red-ink">
           The node library could not be loaded: {libraryError}. Until it can be, the sidebar has
           no nodes to offer and nothing new can be added to the canvas.
         </p>
       ) : null}
 
-      {/* --- body ------------------------------------------------------- */}
-      <div className="flex min-h-0 flex-1">
-        {mode === "build" ? (
-          <aside className="hidden w-[248px] shrink-0 border-r border-line bg-surface lg:block">
+      {/* --- body -------------------------------------------------------
+          The row that gets whatever height the header and the problems footer
+          leave over, which is most of the screen. `min-h-0` is what lets it
+          actually shrink to that: a flex child defaults to its content's size,
+          and without this the three panes would push the row taller than the
+          viewport and the footer off the bottom. `overflow-hidden` is the
+          promise the panes rely on — each of them scrolls inside itself, and
+          none of them may scroll this. */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {mode === "build" && libraryOpen ? (
+          // The library is as tall as the row and scrolls its own families;
+          // `overflow-hidden` here so the search field it pins to its top stays
+          // put while the list beneath it moves.
+          <aside className="hidden w-[248px] shrink-0 overflow-hidden border-r border-line bg-surface lg:block">
             <NodeLibrary families={library?.families ?? []} onAdd={(type) => addNode(type)} />
           </aside>
         ) : null}
 
-        <main className="min-w-0 flex-1">
+        {/* The canvas column: the tallest thing on the screen, and the one that
+            takes every pixel the panes on either side do not. `min-h-0` and
+            `min-w-0` together stop a wide node or a long deploy panel from
+            stretching it past the viewport in either direction.
+
+            A `section` rather than the `main` this used to be. The console
+            shell already renders a `main` around every route — the one the skip
+            link lands in — and a second one inside it is invalid and gives a
+            screen reader two "main" landmarks to choose between, which is one
+            more than the word means. It keeps a landmark and a name, and the
+            name follows the mode, because in DEPLOY this column is not a
+            canvas and calling it one would be a label that lies. */}
+        <section
+          aria-label={mode === "deploy" ? "Deployment" : "Canvas"}
+          className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        >
           {mode === "deploy" ? (
             <DeployPanel
               workflow={current}
@@ -534,7 +654,7 @@ export default function StudioPage() {
               onDrop={(type, position) => addNode(type, position)}
             />
           )}
-        </main>
+        </section>
 
         {/* The right column is never empty in BUILD. A selected node shows its
             own configuration; with nothing selected it shows the workflow —
@@ -542,7 +662,7 @@ export default function StudioPage() {
             engine will run it, and which version is live. A panel that
             disappears when you click the background makes the canvas feel like
             it lost something. */}
-        {mode === "build" ? (
+        {mode === "build" && panelOpen ? (
           selected && selectedSpec ? (
             <ConfigPanel
               node={selected}
@@ -562,7 +682,7 @@ export default function StudioPage() {
               onClose={() => setSelectedId(null)}
             />
           ) : (
-            <div className="hidden min-[1100px]:block">
+            <div className="hidden min-h-0 min-[1100px]:block">
               <WorkflowInspector
                 definition={definition}
                 workflow={current}
@@ -570,7 +690,12 @@ export default function StudioPage() {
                 onCompileAndDeploy={() => setMode("deploy")}
                 busy={busy}
                 problems={blocking.length}
-                onClose={() => setMode("deploy")}
+                // Closes the panel. It used to call setMode("deploy"), so
+                // dismissing the workflow panel silently threw you into the
+                // Deploy tab — a close button that navigates is a close button
+                // that lies, and this one moved you to the one mode where a
+                // mistaken click has consequences.
+                onClose={() => setPanelOpen(false)}
               />
             </div>
           )
@@ -582,7 +707,7 @@ export default function StudioPage() {
             and test as sheets — is not in this package and is not attempted
             here. */}
         {mode === "test" ? (
-          <aside className="flex w-[min(420px,60vw)] shrink-0 flex-col border-l border-line bg-surface">
+          <aside className="flex w-[min(420px,60vw)] min-h-0 shrink-0 flex-col overflow-hidden border-l border-line bg-surface">
             <TestPanel
               inputText={inputText}
               onInputText={setInputText}

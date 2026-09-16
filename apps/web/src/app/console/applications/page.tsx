@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Chip, Eyebrow, Figure, Skeleton, type Tone } from "@/components/console/primitives";
+import { Chip, Eyebrow, Skeleton, type Tone } from "@/components/console/primitives";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextField } from "@/components/ui/Field";
 import { ApiFailureBanner, UnknownRatherThanEmpty } from "@/components/ui/States";
@@ -35,6 +35,13 @@ import { useResource } from "@/lib/useResource";
  */
 const NO_APPLICATIONS: ApplicationOut[] = [];
 
+/**
+ * One page of the projection. Named because the list has to say when it fills
+ * up: somebody who cannot find an application needs to know whether it is not
+ * in the book or merely past the two hundredth row.
+ */
+const APPLICATION_PAGE_LIMIT = 200;
+
 /** Sort keys, named after what a reader is looking for rather than the field. */
 const SORTS = [
   { value: "", label: "As the API returned them" },
@@ -57,19 +64,19 @@ export default function ApplicationsPage() {
 
   const applications = useResource(
     `applications:${token ?? "none"}`,
-    (signal) => api.listApplications(token, { limit: 200 }, signal),
+    (signal) => api.listApplications(token, { limit: APPLICATION_PAGE_LIMIT }, signal),
     NO_APPLICATIONS,
   );
 
-  const statuses = useMemo(
-    () => Array.from(new Set(applications.data.map((a) => a.status))).sort(),
-    [applications.data],
-  );
-
-  const filtered = useMemo(() => {
+  /**
+   * What the search allows, before the stage chips have their say. The chips
+   * count against this set rather than against the final list, so each one says
+   * how many rows pressing it would leave — a count taken after the stage filter
+   * would read zero on every chip but the pressed one.
+   */
+  const beforeStage = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const rows = applications.data.filter((application) => {
-      if (status && application.status !== status) return false;
+    return applications.data.filter((application) => {
       if (!needle) return true;
       return (
         application.external_id.toLowerCase().includes(needle) ||
@@ -77,21 +84,49 @@ export default function ApplicationsPage() {
         application.product.toLowerCase().includes(needle)
       );
     });
+  }, [applications.data, query]);
 
+  /**
+   * The stages, and how many sit in each.
+   *
+   * Read off the rows the API returned rather than from a list held here: the
+   * lending platform owns this vocabulary, and a hard-coded stage this console
+   * has never seen would be a claim about the book that nothing backs. A stage
+   * with nothing in it therefore has no chip, because it was never returned.
+   */
+  const stages = useMemo(() => {
+    const byStatus = new Map<string, number>();
+    for (const application of beforeStage) {
+      byStatus.set(application.status, (byStatus.get(application.status) ?? 0) + 1);
+    }
+    return [...byStatus.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [beforeStage]);
+
+  /**
+   * The chips as they are drawn: every stage the search left standing, plus the
+   * stage currently filtered to even when the search has narrowed it to nothing.
+   * Without that last part, typing an id while a stage is pressed empties the
+   * list and removes the only chip that explains why — which reads as an empty
+   * book rather than a filtered one.
+   */
+  const stageChips = useMemo<[string, number][]>(() => {
+    if (!status || stages.some(([value]) => value === status)) return stages;
+    return [...stages, [status, 0] as [string, number]].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
+  }, [stages, status]);
+
+  const filtered = useMemo(() => {
+    const rows = status
+      ? beforeStage.filter((application) => application.status === status)
+      : beforeStage;
     if (!sort) return rows;
     const direction = descending ? -1 : 1;
     // Copied before sorting: `rows` is already a fresh array here, but the day
     // someone drops the filter above, an in-place sort would start mutating the
     // resource's own data and the "API order" option would quietly stop working.
     return [...rows].sort((a, b) => direction * compare(a, b, sort));
-  }, [applications.data, status, query, sort, descending]);
-
-  const totals = useMemo(() => {
-    const book = filtered.reduce((sum, a) => sum + Number(a.loan_amount ?? 0), 0);
-    const documents = filtered.reduce((sum, a) => sum + a.document_count, 0);
-    const priced = filtered.filter((a) => a.loan_amount).length;
-    return { book, documents, priced };
-  }, [filtered]);
+  }, [beforeStage, status, sort, descending]);
 
   const loading = applications.mode === "loading";
   const failure = applications.failure;
@@ -119,35 +154,46 @@ export default function ApplicationsPage() {
         what="applications"
       />
 
-      <div className="grid gap-5 sm:grid-cols-3">
-        <Figure
-          label="Applications listed"
-          value={answered ? formatCount(filtered.length) : "—"}
-          note={
-            !answered
-              ? "Nothing has been counted, because nothing has been read."
-              : filtersApplied
-                ? `Matching these filters, out of ${formatCount(applications.data.length)} returned.`
-                : "Every application the API returned for this token, capped at 200."
-          }
+      {/* Three figures stood here: how many applications were listed, what they
+          were worth, and how many documents hung off them. None of the three
+          changed what anybody did next — the count was a total above the very
+          list it totalled, the documents figure was the sum of a column two
+          inches below it, and the book's value, though a real business number,
+          is not why an underwriter or a collections manager opens this page and
+          not something they would act on from here. The count came back as the
+          thing it should always have been: a way into the list.
+
+          A group rather than a tablist, because these are toggles over one list
+          rather than panels, and every one should be reachable by Tab. */}
+      <div
+        role="group"
+        aria-label="Filter the list by stage"
+        className="flex flex-wrap items-center gap-1.5"
+      >
+        <StageFilterChip
+          stage=""
+          label="All stages"
+          count={answered ? beforeStage.length : null}
+          pressed={status === ""}
+          onPress={() => setStatus("")}
         />
-        <Figure
-          label="Book value"
-          value={answered ? formatInrCompact(totals.book) : "—"}
-          note={
-            answered
-              ? `Sum of the loan amounts on ${formatCount(totals.priced)} of the ${formatCount(filtered.length)} rows below. The rest carry no amount yet.`
-              : "A book value is a sum of rows. There are no rows."
-          }
-        />
-        <Figure
-          label="Documents"
-          value={answered ? formatCount(totals.documents) : "—"}
-          note="Attached to these applications. Each one costs quota to read."
-        />
+        {/* Only drawn once the API has answered: chips built from rows nobody
+            read would be a list of stages this tenant may not have. */}
+        {answered
+          ? stageChips.map(([value, count]) => (
+              <StageFilterChip
+                key={value}
+                stage={value}
+                label={value.replace(/_/g, " ")}
+                count={count}
+                pressed={status === value}
+                onPress={() => setStatus(value)}
+              />
+            ))
+          : null}
       </div>
 
-      <div className="gv-card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div className="gv-card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <TextField
           label="Search"
           value={query}
@@ -155,15 +201,9 @@ export default function ApplicationsPage() {
           placeholder="Application id, applicant or product"
           type="search"
         />
-        <SelectField
-          label="Status"
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: "", label: "All statuses" },
-            ...statuses.map((value) => ({ value, label: value.replace(/_/g, " ") })),
-          ]}
-        />
+        {/* The status dropdown that stood here is gone rather than duplicated:
+            the chips above set the same state, name the same stages and carry
+            the counts as well, and one filter deserves one control. */}
         <SelectField label="Sort by" value={sort} onChange={setSort} options={SORTS} />
         <div className="flex items-end">
           {/* Disabled never hides: the title says which choice is missing. */}
@@ -196,7 +236,7 @@ export default function ApplicationsPage() {
         ) : filtered.length === 0 ? (
           <UnknownRatherThanEmpty>
             {filtersApplied
-              ? "No application matches these filters. Clearing the status or the search term will widen the set."
+              ? "No application matches these filters. Pressing All stages, or clearing the search term, will widen the set."
               : "This tenant has no applications yet. They appear here as the lending platform creates them and the connector syncs the projection."}
           </UnknownRatherThanEmpty>
         ) : (
@@ -208,11 +248,70 @@ export default function ApplicationsPage() {
         )}
       </section>
 
+      {/* The one thing the "applications listed" figure said that the list
+          cannot say for itself, kept, and shown only when it is true: that the
+          page filled up and the application somebody is hunting for may be
+          sitting just past the end of it. */}
+      {answered && applications.data.length >= APPLICATION_PAGE_LIMIT ? (
+        <p className="text-[11.5px] leading-relaxed text-ink-3">
+          The API returned its full page of {formatCount(APPLICATION_PAGE_LIMIT)} applications and
+          stopped there. An application beyond these is not listed and not missing from the book —
+          search for its id or the applicant to reach it.
+        </p>
+      ) : null}
+
       <p className="text-[11.5px] leading-relaxed text-ink-3">
         Aadhaar is held and displayed as the last four digits only. The full number is never
         stored, so it cannot be returned by the API or exported from this screen.
       </p>
     </div>
+  );
+}
+
+/**
+ * A stage count that is also the filter for that stage.
+ *
+ * The tone is the one the same stage wears on the rows below, so colour still
+ * means outcome and nothing else, and it is spent only where there is an
+ * outcome to colour — All stages stays neutral because a book is not itself a
+ * verdict. Since the tone is carrying the outcome, the pressed state is carried
+ * by the border, the weight of the label and `aria-pressed` rather than by hue.
+ */
+function StageFilterChip({
+  stage,
+  label,
+  count,
+  pressed,
+  onPress,
+}: {
+  stage: string;
+  label: string;
+  count: number | null;
+  pressed: boolean;
+  onPress: () => void;
+}) {
+  const tone: Tone = stage && count ? statusTone(stage) : "slate";
+  // The spoken name has to contain the word on the chip, because someone driving
+  // this by voice says what they can see. "Every stage" read well and left
+  // "All stages" unsayable, so the wording follows the label rather than prose.
+  const describes = stage ? `applications at stage ${label}` : "applications at all stages";
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-pressed={pressed}
+      aria-label={count === null ? `Show ${describes}` : `Show ${describes}, ${formatCount(count)}`}
+      className={`gv-chip gv-chip-${tone} h-[26px] border ${
+        pressed ? "border-navy font-semibold" : "border-line hover:border-ink-4"
+      }`}
+    >
+      <span aria-hidden="true">{label}</span>
+      {count === null ? null : (
+        <span aria-hidden="true" className="font-mono">
+          {formatCount(count)}
+        </span>
+      )}
+    </button>
   );
 }
 

@@ -1,16 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  BacklogProjection,
-  ChartFrame,
-  SharePie,
-  StackedBars,
-  TrendArea,
-  UtilisationLine,
-} from "@/components/console/Charts";
+import { BacklogProjection, ChartFrame, TrendArea } from "@/components/console/Charts";
 import { Chip, Eyebrow, Figure, Skeleton } from "@/components/console/primitives";
-import { SliderField, ToggleField } from "@/components/ui/Field";
+import { SegmentedControl, SliderField, ToggleField } from "@/components/ui/Field";
 import { Meter } from "@/components/ui/Stat";
 import { ApiFailureBanner, InlineNote } from "@/components/ui/States";
 import { Panel } from "@/components/ui/Surface";
@@ -23,9 +16,8 @@ import {
   formatInrCompact,
   formatNumber,
   formatPercent,
-  formatTokens,
 } from "@/lib/format";
-import { DOC_AI_RPM, RATE_CARD, VOLUME, productLabel } from "@/lib/platform";
+import { DOC_AI_RPM, RATE_CARD, productLabel } from "@/lib/platform";
 import { useToken } from "@/lib/session";
 import {
   DEFAULT_SCENARIO,
@@ -40,22 +32,48 @@ import { useResource } from "@/lib/useResource";
 /**
  * Platform › Usage.
  *
- * Throughput leads and consumption follows, which is a reversal of the old
- * page. The reason is that spend is a consequence and capacity is a
- * constraint: knowing what went out last month changes nobody's plan,
- * whereas knowing that the month's documents cannot physically be read at ten
- * requests a minute changes it immediately.
- */
-
-/**
- * A deliberately peaky submission profile: month-end batches are not flat.
+ * Somebody opens this page to answer one of three questions and then close it:
+ * what is this costing us, is throughput being limited right now, and which
+ * agent or product is responsible for the bill. Throughput leads because spend
+ * is a consequence and capacity is a constraint — knowing what went out last
+ * month changes nobody's plan, whereas knowing that the month's documents
+ * cannot physically be read at ten requests a minute changes it immediately.
  *
- * This is a shape the throughput model is driven with, not a measurement, and
- * the chart that renders it says so. It stays because it is an input to a
- * declared model — unlike the consumption figures below, which are only ever
- * reported, never assumed.
+ * WHAT WAS REMOVED, AND WHY IT SHOULD NOT COME BACK. This page carried
+ * seventeen figures and four charts. Most of them were true and nobody acted on
+ * any of them, which is worse than useless: twenty numbers bury the three that
+ * matter. Gone, each for a stated reason rather than for tidiness:
+ *
+ *   - The four model tiles (quota calls per document, documents per hour,
+ *     monthly capacity, utilisation). Every one of them is a cell in the
+ *     scenario matrix further down, on the row the reader has selected, and the
+ *     verdict card states the same result in a sentence. They were a table's
+ *     top row reprinted above the table.
+ *   - "Governor tokens free". It is the complement of "Utilisation now" against
+ *     the same ceiling: two tiles, one fact, and a reader who has to do the
+ *     subtraction to check they agree.
+ *   - "Utilisation by hour of a business day". It was drawn from a hard-coded
+ *     peaky weight profile — a shape this console made up — and it told the
+ *     reader only what the utilisation figure already tells them. A modelled
+ *     line is fine as an input to a stated calculation; it is not fine as the
+ *     picture of a day that nobody measured.
+ *   - Requests, pages read, tokens in, tokens out and audio hours. Volume
+ *     trivia. Nothing is decided differently because the month moved 40M tokens
+ *     rather than 30M; the bill is in rupees and the rupees are below.
+ *   - "Cost per application" and "cost per document". Both divided measured
+ *     spend by a number taken from the scenario sliders, so they moved when
+ *     somebody dragged a planning control on the other tab. A figure that mixes
+ *     a measurement with an assumption is not a unit cost, it is a trap.
+ *   - "Spend by tenant" (a pie of a handful of values) and "spend by agent" (ten
+ *     bars a person reads as ten numbers). Both are now groupings of the one
+ *     breakdown table, which is what they always were. The shapes went; the two
+ *     questions they answered — who do we bill, and which agent ran up the
+ *     bill — did not, and must not.
+ *
+ * Two charts survive, and only because neither is a table in disguise: the
+ * backlog projection is a curve whose shape is the point, and spend per day is
+ * the trajectory a budget is defended against.
  */
-const HOURLY_PROFILE = [0.4, 0.9, 1.3, 1.6, 1.4, 0.7, 1.1, 1.5, 1.2, 0.6, 0.3, 0.2];
 
 /**
  * Consumption and governor state before the API answers: nothing.
@@ -63,29 +81,57 @@ const HOURLY_PROFILE = [0.4, 0.9, 1.3, 1.6, 1.4, 0.7, 1.1, 1.5, 1.2, 0.6, 0.3, 0
  * A written-out month of spend, tokens and pages used to fill this page when
  * `/v1/usage` could not be reached. Invented consumption is invoicing
  * evidence — somebody reconciles a bill against it, or budgets from it — so
- * there is none. The throughput model above is different in kind: it is a
- * stated calculation over stated assumptions, and it is derived in front of the
- * reader rather than asserted.
+ * there is none. The throughput model is different in kind: it is a stated
+ * calculation over stated assumptions, and it is derived in front of the reader
+ * rather than asserted.
  */
 const NO_USAGE: UsageRow[] = [];
 const NO_GOVERNOR: GovernorStateOut[] = [];
 
+/**
+ * The tab labels name the questions rather than the data.
+ *
+ * "Throughput" alone did not tell anyone that the live rate-limit state was
+ * behind it, so people went looking for the governor elsewhere. The panel ids
+ * are unchanged because they are what the tab controls are wired to.
+ */
 const TABS = [
-  { id: "throughput", label: "Throughput" },
-  { id: "consumption", label: "Consumption" },
+  { id: "throughput", label: "Throughput & limits" },
+  { id: "consumption", label: "Cost" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 /**
+ * Three ways to ask who the bill belongs to, not two.
+ *
+ * "By tenant" is here because the trim that produced this page dropped the
+ * "Spend by tenant" ring, and the objection to that chart was its shape — a
+ * handful of slices standing in for a handful of rupee figures — rather than
+ * its subject. Tenant is the one breakdown somebody bills against: an
+ * underwriter chasing a provider wants the agent, and whoever raises the
+ * invoice wants the tenant. It is a first-class column on Runs for the same
+ * reason. As a list of named rows it answers the question the ring only
+ * gestured at.
+ */
+const BREAKDOWNS = [
+  { value: "product", label: "By product" },
+  { value: "agent", label: "By agent" },
+  { value: "tenant", label: "By tenant" },
+] as const;
+
+type BreakdownId = (typeof BREAKDOWNS)[number]["value"];
+
+/** How many named rows the breakdown lists before it says how many it is hiding. */
+const ROW_LIMIT = 10;
+
+/**
  * The model's own account of itself, in one paragraph.
  *
- * The handoff calls for `describeScenario()` from `lib/throughput.ts`; no such
- * export exists in this codebase, and this agent does not own that file, so the
- * prose lives beside the page that renders it. That is the right place for it
- * anyway — `throughput.ts` computes numbers and has no business holding
- * sentences — but it is worth lifting into the library the day a second screen
- * needs the same summary.
+ * This prose now carries the whole verdict: the tiles that used to restate
+ * capacity, documents per hour and quota calls per document beside it are gone,
+ * so the sentence has to contain them. It reads them out of the same result the
+ * matrix below recomputes, so the two can never disagree.
  */
 function describeScenario(
   scenario: ThroughputScenario,
@@ -120,6 +166,7 @@ function describeScenario(
 export default function UsagePage() {
   const [token] = useToken();
   const [tab, setTab] = useState<TabId>("throughput");
+  const [breakdown, setBreakdown] = useState<BreakdownId>("product");
   const [scenario, setScenario] = useState<ThroughputScenario>(DEFAULT_SCENARIO);
 
   const usage = useResource(
@@ -139,43 +186,28 @@ export default function UsagePage() {
   const matrix = useMemo(() => scenarioMatrix(scenario), [scenario]);
   const summary = useMemo(() => describeScenario(scenario, result), [scenario, result]);
 
-  const hourly = useMemo(
-    () =>
-      HOURLY_PROFILE.map((weight, index) => {
-        const documents = weight * result.documentsPerHour;
-        return {
-          hour: `${String(index + 8).padStart(2, "0")}:00`,
-          utilisation: Number(Math.min(1.6, weight).toFixed(2)),
-          documents: Math.round(documents),
-        };
-      }),
-    [result],
+  // Only rupees are totalled now. The request, page, token and audio sums that
+  // used to be computed here fed tiles nobody acted on; the loop that produced
+  // them went with the tiles rather than being left to run for nothing.
+  const spend = useMemo(
+    () => usage.data.reduce((total, row) => total + row.cost_inr, 0),
+    [usage.data],
   );
 
-  const totals = useMemo(() => {
-    let cost = 0;
-    let requests = 0;
-    let pages = 0;
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let audio = 0;
-    for (const row of usage.data) {
-      cost += row.cost_inr;
-      requests += row.requests;
-      pages += row.pages;
-      inputTokens += row.input_tokens;
-      outputTokens += row.output_tokens;
-      audio += row.audio_seconds;
-    }
-    return { cost, requests, pages, inputTokens, outputTokens, audio };
-  }, [usage.data]);
-
-  const byTenant = useMemo(() => {
+  /**
+   * Spend per day, oldest first.
+   *
+   * The sort is not cosmetic. The previous version of this series took whatever
+   * order the API happened to return and plotted it straight onto a time axis,
+   * which draws a line that zigzags backwards through the month and reads as
+   * volatility that is not there.
+   */
+  const dailySpend = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of usage.data) map.set(row.tenant, (map.get(row.tenant) ?? 0) + row.cost_inr);
+    for (const row of usage.data) map.set(row.date, (map.get(row.date) ?? 0) + row.cost_inr);
     return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
-      .sort((a, b) => b.value - a.value);
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, cost]) => ({ date: date.slice(5), cost: Number(cost.toFixed(2)) }));
   }, [usage.data]);
 
   const byProduct = useMemo(() => {
@@ -199,27 +231,23 @@ export default function UsagePage() {
       .sort((a, b) => b.cost - a.cost);
   }, [usage.data]);
 
-  const byAgent = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const row of usage.data)
-      map.set(row.agent_id, (map.get(row.agent_id) ?? 0) + row.cost_inr);
-    return Array.from(map.entries())
-      .map(([agent, cost]) => ({ agent: agent.replace(/_/g, " "), cost: Number(cost.toFixed(2)) }))
-      .sort((a, b) => b.cost - a.cost)
-      .slice(0, 10);
-  }, [usage.data]);
+  /**
+   * Agents and tenants both carry requests as well as cost, because either view
+   * has to answer the same question the product view does. An agent that only
+   * touches unpriced products bills zero rupees while doing real work, and a
+   * list that showed cost alone would file it under "costs nothing" rather than
+   * under "costs an amount this console cannot price yet".
+   */
+  const byAgent = useMemo(() => groupByName(usage.data, (row) => row.agent_id), [usage.data]);
+  const byTenant = useMemo(() => groupByName(usage.data, (row) => row.tenant), [usage.data]);
 
-  const dailyRequests = useMemo(() => {
-    const map = new Map<string, { date: string; docai: number; llm: number; speech: number }>();
-    for (const row of usage.data) {
-      const bucket = map.get(row.date) ?? { date: row.date.slice(5), docai: 0, llm: 0, speech: 0 };
-      if (row.product.startsWith("docai")) bucket.docai += row.requests;
-      else if (row.product.startsWith("llm")) bucket.llm += row.requests;
-      else bucket.speech += row.requests;
-      map.set(row.date, bucket);
-    }
-    return Array.from(map.values());
-  }, [usage.data]);
+  // Agents and tenants are the same row — a name, its requests and its rupees —
+  // so they share one list rather than two nearly identical ones. Products keep
+  // their own branch because a product row also carries the rate-card chip that
+  // says whether its rupees are real.
+  const namedRows = breakdown === "agent" ? byAgent : byTenant;
+  const shownRows = namedRows.slice(0, ROW_LIMIT);
+  const hiddenRows = namedRows.length - shownRows.length;
 
   const docai = governor.data.find((row) => row.product === "docai");
 
@@ -241,18 +269,19 @@ export default function UsagePage() {
         }, so ${about} is unknown — not zero.`
       : `The governor answered with no document-intelligence bucket, so ${about} is not reported for this ceiling.`;
 
-  // A zero capacity would make this NaN rather than a percentage, and a tile
-  // that renders "NaN%" is read as a bug in the console rather than as the
-  // missing ceiling it actually is.
+  /**
+   * How much of the bucket is in use, or null when there is nothing to divide by.
+   *
+   * A zero capacity would make this NaN, and the guard here used to substitute
+   * zero. That was survivable while "Governor tokens free" stood beside this
+   * tile — a reader could see the bucket state twice and notice the two did not
+   * agree — and it is not survivable now that utilisation is the only thing the
+   * page says about the bucket. A governor reporting no ceiling would have
+   * rendered "0%" in unalarmed ink, which is a measurement nobody made dressed
+   * as plenty of headroom. Null instead, and the tile says why.
+   */
   const liveUtilisation =
-    docai && docai.capacity > 0 ? (docai.capacity - docai.available) / docai.capacity : 0;
-
-  const applicationsCovered = Math.round(
-    scenario.documentsPerMonth / VOLUME.documentsPerApplication,
-  );
-  const costPerApplication = applicationsCovered > 0 ? totals.cost / applicationsCovered : 0;
-  const costPerDocument =
-    totals.pages > 0 ? totals.cost / (totals.pages / VOLUME.pagesPerDocument) : 0;
+    docai && docai.capacity > 0 ? (docai.capacity - docai.available) / docai.capacity : null;
 
   const loading = usage.mode === "loading";
   // Consumption figures are reported only when the API reported them. A total
@@ -272,9 +301,10 @@ export default function UsagePage() {
         <Eyebrow>Platform · Usage</Eyebrow>
         <h1 className="gv-page-title mt-1.5">Usage</h1>
         <p className="mt-2 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
-          The throughput model that decides whether a month&apos;s documents can be read at all,
-          and the consumption those reads produce. This is the live version of the volume
-          spreadsheet: every figure below is derived, none is asserted.
+          Whether the document pipeline is being held up right now, whether a month&apos;s
+          documents can be read at all, and what the reads cost. Every figure below is either
+          measured by the API or derived in front of you from the scenario you set; none is
+          asserted.
         </p>
       </header>
 
@@ -309,60 +339,23 @@ export default function UsagePage() {
           aria-labelledby="usage-tab-throughput"
           className="space-y-5"
         >
-          {/* The headline this model exists to surface. Computed, not asserted. */}
-          <section className="gv-card p-5">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <Eyebrow>What the model says about this scenario</Eyebrow>
-              <Chip tone={summary.strained ? "amber" : "green"}>
-                {summary.strained ? "Over capacity" : "Within capacity"}
-              </Chip>
-            </div>
-            <p className="mt-2 max-w-4xl text-[clamp(15px,1.5vw,17px)] leading-snug font-semibold text-ink">
-              {summary.headline}
-            </p>
-            <p className="mt-2 max-w-4xl text-[13.5px] leading-relaxed text-ink-2">
-              {summary.body}
-            </p>
-          </section>
-
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            <Figure
-              label="Quota calls per document"
-              value={formatNumber(result.quotaCallsPerDocument, 1)}
-              note={`Mix-weighted: extract costs ${result.extract.quota}, digitise costs ${result.digitise.quota}.`}
-            />
-            <Figure
-              label="Documents per hour"
-              value={formatNumber(result.documentsPerHour, 0)}
-              note={`${formatNumber(result.documentsPerBusinessDay, 0)} per business day at ${scenario.businessHoursPerDay} hours.`}
-            />
-            <Figure
-              label="Monthly capacity"
-              value={formatCount(Math.round(result.monthlyCapacityDocuments))}
-              note={`Documents, over ${scenario.businessDaysPerMonth} business days. Not a billing limit — a physical one.`}
-            />
-            <Figure
-              label="Utilisation"
-              value={formatPercent(result.utilisation, 0)}
-              tone={result.utilisation > 1 ? "red" : result.utilisation > 0.8 ? "amber" : "green"}
-              pct={result.utilisation * 100}
-              note={
-                result.utilisation > 1
-                  ? "Demand exceeds capacity, so the backlog grows rather than drains."
-                  : "Steady-state demand against the ceiling this scenario implies."
-              }
-            />
-          </div>
-
+          {/* The governor comes first on the default tab, so the live state of
+              the queue is the first thing on the page rather than the fourth
+              thing on it. It is the only block here that is measured rather
+              than modelled, and it is the one somebody opens this page at
+              eleven in the morning to look at: work is either waiting for a
+              token or it is not. The planning model that used to sit above it
+              can wait — nobody plans capacity before they have found out
+              whether today is moving. */}
           <section aria-labelledby="governor-now" className="space-y-3">
             <h2 id="governor-now" className="text-[16px] font-semibold text-ink">
-              The governor, right now
+              The rate limit, right now
             </h2>
 
             {/* The governor fails independently of `/v1/usage`, and the banner
                 at the top of the page only speaks for consumption. Without this
                 one, a reader whose usage loaded and whose governor did not gets
-                four em dashes, no HTTP status, no correlation id and no way to
+                three em dashes, no HTTP status, no correlation id and no way to
                 try again. */}
             <ApiFailureBanner
               failure={governor.failure}
@@ -371,8 +364,8 @@ export default function UsagePage() {
             />
 
             {governor.mode === "loading" ? (
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                {Array.from({ length: 4 }, (_, index) => (
+              <div className="grid gap-5 sm:grid-cols-3">
+                {Array.from({ length: 3 }, (_, index) => (
                   <div key={index} className="grid gap-2">
                     <Skeleton h={10} w="40%" />
                     <Skeleton h={30} w="60%" />
@@ -381,17 +374,13 @@ export default function UsagePage() {
                 ))}
               </div>
             ) : (
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                <Figure
-                  label="Governor tokens free"
-                  value={docai ? docai.available.toFixed(1) : "—"}
-                  tone={docai && liveUtilisation > 0.85 ? "amber" : undefined}
-                  note={
-                    docai
-                      ? `Of ${DOC_AI_RPM}. The bucket refills continuously, one token every six seconds.`
-                      : governorSilence("the bucket state")
-                  }
-                />
+              /* Three tiles, not four. "Governor tokens free" was the fourth and
+                 it is the same measurement as "Utilisation now" read from the
+                 other end of the bucket; keeping both asked the reader to
+                 reconcile a count of tokens with a percentage of a ceiling
+                 before they could trust either. The ceiling itself is named in
+                 the note instead, where it costs no vertical space. */
+              <div className="grid gap-5 sm:grid-cols-3">
                 <Figure
                   label="Queue depth"
                   value={docai ? formatCount(docai.queue_depth) : "—"}
@@ -407,57 +396,76 @@ export default function UsagePage() {
                   tone={docai && docai.estimated_wait_seconds > 300 ? "amber" : undefined}
                   note={
                     docai
-                      ? "What a call submitted this second would wait, at the current queue depth."
+                      ? // The amber is a judgement about the number, so the
+                        // judgement is written out as well as coloured: a reader
+                        // who cannot see the tone still learns that this wait has
+                        // crossed the line the console draws at five minutes.
+                        `What a call submitted this second would wait, at the current queue depth.${
+                          docai.estimated_wait_seconds > 300 ? " Past the five-minute mark." : ""
+                        }`
                       : governorSilence("the wait a call would meet")
                   }
                 />
                 <Figure
                   label="Utilisation now"
-                  value={docai ? formatPercent(liveUtilisation, 0) : "—"}
-                  tone={docai && liveUtilisation > 0.85 ? "red" : undefined}
-                  pct={docai ? liveUtilisation * 100 : undefined}
+                  value={liveUtilisation === null ? "—" : formatPercent(liveUtilisation, 0)}
+                  tone={liveUtilisation !== null && liveUtilisation > 0.85 ? "red" : undefined}
+                  pct={liveUtilisation === null ? undefined : liveUtilisation * 100}
                   note={
-                    docai
-                      ? `Against the ${DOC_AI_RPM} requests per minute ceiling, measured rather than modelled.`
-                      : `${governorSilence("utilisation")} This tile will not model a number the ceiling is supposed to measure.`
+                    docai && liveUtilisation !== null
+                      ? // The denominator is the ceiling the governor reports, not
+                        // the one this console is configured for, and when the two
+                        // disagree that is itself worth saying: a lower enforced
+                        // ceiling changes what can be promised, and a higher one
+                        // usually means enforcement is suspended.
+                        `${
+                          docai.capacity === DOC_AI_RPM
+                            ? `Against the ${DOC_AI_RPM} requests per minute ceiling`
+                            : `Against the ${formatNumber(docai.capacity, 0)} requests per minute the governor reports, not the ${DOC_AI_RPM} this console is configured for`
+                        }, measured rather than modelled.${
+                          liveUtilisation > 0.85
+                            ? " Past 85%, which is where this console treats the bucket as saturated."
+                            : ""
+                        }`
+                      : docai
+                        ? // The governor answered for docai and reported no
+                          // ceiling to measure against. Dividing by it would give
+                          // NaN and substituting zero would give false comfort, so
+                          // the tile reports the hole instead.
+                          "The governor reports no ceiling for document intelligence, so there is nothing to measure utilisation against — this tile will not print a percentage of zero."
+                        : `${governorSilence("utilisation")} This tile will not model a number the ceiling is supposed to measure.`
                   }
                 />
               </div>
             )}
+          </section>
 
-            <div className="grid gap-3 lg:grid-cols-2">
-              {/* There was a "Governor state, last hour" chart here, drawn from
-                  sixty invented minutes. `/v1/usage/governor` reports the
-                  bucket as it is now and keeps no history, so the chart was a
-                  picture of a past that never happened — and a queue-depth
-                  trend is exactly the sort of line someone plans capacity
-                  against. It returns when the endpoint returns a series. */}
-              <Panel
-                title="Governor state over time"
-                description="One point per minute for the last hour, once the API records one."
-              >
-                <p className="text-[13px] leading-relaxed text-ink-2">
-                  The governor endpoint reports the bucket as it stands right now; it keeps no
-                  history, so there is no series to plot. The four figures above are the whole of
-                  what is measured. A trend drawn from anything else would be a capacity
-                  planning input this platform invented for itself.
-                </p>
-              </Panel>
+          {/* There was a "Governor state, last hour" chart here, drawn from
+              sixty invented minutes, and after that a panel explaining at
+              length why the chart had gone. Both are now this comment.
+              `/v1/usage/governor` reports the bucket as it stands and keeps no
+              history, so there is no series to plot and the three figures above
+              are the whole of what is measured; a paragraph on screen saying so
+              was itself something nobody acts on. The chart returns when the
+              endpoint returns a series, and not before — a queue-depth trend is
+              exactly the sort of line someone plans capacity against. */}
 
-              <ChartFrame
-                title="Utilisation by hour of a business day"
-                description="Modelled from the scenario below, not measured: submission is peaky, not flat, and the ceiling does not move to accommodate a month-end batch."
-                height={240}
-              >
-                <UtilisationLine
-                  data={hourly}
-                  xKey="hour"
-                  valueKey="utilisation"
-                  ceiling={1}
-                  formatter={(value) => `${(value * 100).toFixed(0)}%`}
-                />
-              </ChartFrame>
+          {/* The headline this model exists to surface. Computed, not asserted,
+              and now carrying the numbers the four tiles below it used to
+              repeat. */}
+          <section className="gv-card p-5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Eyebrow>What the model says about this scenario</Eyebrow>
+              <Chip tone={summary.strained ? "amber" : "green"}>
+                {summary.strained ? "Over capacity" : "Within capacity"}
+              </Chip>
             </div>
+            <p className="mt-2 max-w-4xl text-[clamp(15px,1.5vw,17px)] leading-snug font-semibold text-ink">
+              {summary.headline}
+            </p>
+            <p className="mt-2 max-w-4xl text-[13.5px] leading-relaxed text-ink-2">
+              {summary.body}
+            </p>
           </section>
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
@@ -536,6 +544,11 @@ export default function UsagePage() {
               </div>
             </Panel>
 
+            {/* One of the two charts that survived the cut. The shape is the
+                point: a backlog that bends toward zero and one that never
+                touches it are different decisions, and neither is legible as a
+                single "days to drain" figure — which is why the figure is in
+                the description and the curve is in the frame. */}
             <Panel
               title="Backlog drain projection"
               description={
@@ -552,14 +565,37 @@ export default function UsagePage() {
                 />
               </div>
               <div className="mt-3">
+                {/* The meter is handed a value capped at the ceiling, and the
+                    sentence below it carries the overage instead.
+
+                    This is not cosmetic. `Meter` clamps any ratio above 1.5 to
+                    1.5 and then prints its own "Over capacity by N%" line from
+                    the clamped value, so the default scenario — demand at eight
+                    times capacity — rendered "Over capacity by 50%" directly
+                    beneath a verdict card reading "Demand is 8.0x the available
+                    capacity". One of those two numbers was wrong by an order of
+                    magnitude, and it was the one drawn in fail red next to a
+                    bar, which is the one a reader quotes. Capping the input
+                    stops the component printing that line at all; a full bar
+                    now means "at or past the ceiling" and the words say by how
+                    much. */}
                 <Meter
-                  value={result.utilisation}
+                  value={Math.min(result.utilisation, 1)}
                   max={1}
                   tone={
                     result.utilisation > 1 ? "fail" : result.utilisation > 0.8 ? "amber" : "brand"
                   }
                   label="Steady-state utilisation against capacity"
                 />
+                <p
+                  className={`mt-1 text-[11.5px] font-medium ${
+                    result.utilisation > 1 ? "text-fail" : "text-ink-3"
+                  }`}
+                >
+                  {result.utilisation > 1
+                    ? `Over capacity: steady-state demand is ${formatNumber(result.utilisation, 1)}x what the ceiling supports.`
+                    : `${formatPercent(result.utilisation, 0)} of the ceiling used at steady state.`}
+                </p>
               </div>
             </Panel>
           </div>
@@ -570,8 +606,9 @@ export default function UsagePage() {
                 The two assumptions, side by side
               </h2>
               <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
-                Each row recomputes the whole model. This is the strip that decides whether the
-                question is worth putting to the provider.
+                Each row recomputes the whole model; the selected row is the scenario set on the
+                left. This is the strip that decides whether the question is worth putting to the
+                provider.
               </p>
             </div>
             <ul>
@@ -638,21 +675,21 @@ export default function UsagePage() {
           className="space-y-5"
         >
           {loading ? (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-6">
-              {Array.from({ length: 6 }, (_, index) => (
-                <div key={index} className="grid gap-2">
-                  <Skeleton h={10} w="50%" />
-                  <Skeleton h={30} w="70%" />
-                </div>
-              ))}
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+              <div className="grid gap-2">
+                <Skeleton h={10} w="50%" />
+                <Skeleton h={30} w="70%" />
+                <Skeleton h={11} w="90%" />
+              </div>
+              <Skeleton h={240} />
             </div>
           ) : !answered ? (
             <Panel title="Nothing to report">
               <p className="text-[13px] leading-relaxed text-ink-2">
-                No spend, request count, page count or token total is shown, because none was
-                read. Consumption figures are what a bill gets reconciled against and what a
-                budget gets set from, so an unread month is reported as unread rather than as a
-                quiet zero. The note above carries the reason and a way to try again.
+                No spend figure and no breakdown is shown, because none was read. Consumption
+                figures are what a bill gets reconciled against and what a budget gets set from,
+                so an unread month is reported as unread rather than as a quiet zero. The note
+                above carries the reason and a way to try again.
               </p>
             </Panel>
           ) : usage.data.length === 0 ? (
@@ -665,151 +702,137 @@ export default function UsagePage() {
             </Panel>
           ) : (
             <>
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-6">
-                <Figure
-                  label="Spend"
-                  value={formatInrCompact(totals.cost)}
-                  note="Priced rate-card rows only."
-                />
-                <Figure
-                  label="Requests"
-                  value={formatCount(totals.requests)}
-                  note="Billable calls across every product."
-                />
-                <Figure
-                  label="Pages read"
-                  value={formatCount(totals.pages)}
-                  note="Document pages, the unit both extract and digitise are priced in."
-                />
-                <Figure
-                  label="Tokens in"
-                  value={formatTokens(totals.inputTokens)}
-                  note="Sent to the language model."
-                />
-                <Figure
-                  label="Tokens out"
-                  value={formatTokens(totals.outputTokens)}
-                  note="Returned by it, and the part that is priced higher."
-                />
-                <Figure
-                  label="Audio"
-                  value={`${formatNumber(totals.audio / 3600, 1)} h`}
-                  note="Speech processed, billed by the second."
-                />
-              </div>
+              {/* One figure and one chart: what the window cost, and whether it
+                  is accelerating. The five tiles that used to stand beside the
+                  spend figure — requests, pages, tokens in, tokens out, audio —
+                  counted things nobody spends, and the request count in
+                  particular was the sum of a column in the table below. */}
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+                <div className="gv-card p-5">
+                  <Figure
+                    label="Spend, this window"
+                    value={formatInrCompact(spend)}
+                    note={
+                      unsetRateCardRows > 0
+                        ? `A floor, not a total: ${formatCount(unsetRateCardRows)} of ${formatCount(RATE_CARD.length)} rate-card rows have no contracted price yet, and work priced at those rows bills as zero here.`
+                        : "Every rate-card row has a contracted price, so this is the whole of it."
+                    }
+                  />
+                </div>
 
-              {/* Both captions below used to read the dossier out loud — which
-                  product dominated, which tenant carried the volume. Those were
-                  true of data that no longer exists, and stated over a real
-                  tenant's spend they are findings this console never made. A
-                  caption may say what a chart counts; it may not say what the
-                  chart is about to show. */}
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
                 <ChartFrame
-                  title="Requests per day by product group"
-                  description="Counted as billable calls, so a polled document read contributes one request per poll rather than one per document."
-                  height={270}
+                  title="Spend per day"
+                  description="Rupee cost by day, oldest first, on the same floor as the figure beside it. The slope is what a month-end budget gets defended against."
+                  height={240}
                 >
                   <TrendArea
-                    data={dailyRequests}
+                    data={dailySpend}
                     xKey="date"
-                    series={[
-                      { key: "docai", label: "Document intelligence" },
-                      { key: "llm", label: "Model" },
-                      { key: "speech", label: "Speech" },
-                    ]}
-                    formatter={(value) => formatCompactNumber(value)}
-                  />
-                </ChartFrame>
-
-                <ChartFrame
-                  title="Spend by tenant"
-                  description="Rupee cost attributed to each tenant this token can see, over the window above."
-                  height={270}
-                >
-                  <SharePie data={byTenant} formatter={(value) => formatInrCompact(value)} />
-                </ChartFrame>
-              </div>
-
-              <div className="grid gap-3 lg:grid-cols-2">
-                <ChartFrame
-                  title="Spend by agent"
-                  description="Top ten agents by rupee cost."
-                  height={260}
-                >
-                  <StackedBars
-                    data={byAgent}
-                    xKey="agent"
-                    series={[{ key: "cost", label: "₹ cost" }]}
-                    stacked={false}
+                    series={[{ key: "cost", label: "Spend" }]}
                     formatter={(value) => formatInrCompact(value)}
                   />
                 </ChartFrame>
+              </div>
 
-                <section aria-labelledby="by-product" className="gv-card overflow-hidden">
-                  <div className="border-b border-line-2 px-4 py-3">
-                    <h2 id="by-product" className="text-[15px] font-semibold text-ink">
-                      By product
+              {/* One table, three groupings, rather than a pie of tenants, a
+                  bar chart of agents and a table of products. The question
+                  people actually arrive with is "who is responsible for this
+                  bill", and it is answered by reading down a column — which is
+                  what the bar chart and the ring were making them do anyway,
+                  only through a picture. The tenant grouping is here because
+                  that question has two answers depending on who is asking:
+                  operations wants the agent, billing wants the tenant. */}
+              <section aria-labelledby="breakdown" className="gv-card overflow-hidden">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-2 px-4 py-3">
+                  <div className="min-w-0">
+                    <h2 id="breakdown" className="text-[15px] font-semibold text-ink">
+                      Where the spend went
                     </h2>
                     <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
-                      Requests and rupee cost against the pinned rate card.
+                      {breakdown === "product"
+                        ? "Requests and rupee cost against the pinned rate card. A product with no contracted rate still shows its requests, because that is the work the bill is missing."
+                        : breakdown === "agent"
+                          ? "Requests and rupee cost per agent, highest spend first. An agent that only calls unpriced products bills nothing and still does work."
+                          : "Requests and rupee cost per tenant, highest spend first — the attribution an invoice is raised from. Only tenants this token can see are counted."}
                     </p>
                   </div>
-                  {byProduct.length === 0 ? (
-                    <p className="px-6 py-10 text-center text-[13px] leading-relaxed text-ink-3">
-                      No usage has been recorded in this window, so there is nothing to price.
-                    </p>
-                  ) : (
-                    <ul>
-                      {byProduct.map((row) => {
-                        const rate = RATE_CARD.find((card) => card.product === row.product);
-                        const priced = rate?.inrPerUnit !== null && rate?.inrPerUnit !== undefined;
-                        return (
-                          <li
-                            key={row.product}
-                            className="gv-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5"
-                          >
-                            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
-                              <span className="text-[13px] font-medium text-ink">{row.label}</span>
-                              <span className="gv-id text-ink-4">{row.product}</span>
-                            </span>
-                            {priced ? (
-                              <Chip tone="slate" mono>
-                                ₹{rate.inrPerUnit!.toFixed(2)}/{rate.unit}
-                              </Chip>
-                            ) : (
-                              <Chip tone="amber">Rate not set</Chip>
-                            )}
-                            <dl className="col-span-2 flex flex-wrap gap-x-4 gap-y-0.5">
-                              <Pair label="Requests" value={formatCount(row.requests)} />
-                              <Pair label="Cost" value={formatInr(row.cost)} />
-                            </dl>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </section>
-              </div>
+                  <SegmentedControl
+                    label="Break the spend down by"
+                    value={breakdown}
+                    options={[...BREAKDOWNS]}
+                    onChange={(value) => setBreakdown(value as BreakdownId)}
+                  />
+                </div>
 
-              <div className="grid gap-5 sm:grid-cols-3">
-                <Figure
-                  label="Cost per application"
-                  value={formatInr(costPerApplication)}
-                  note={`Spend above divided over the ${formatCount(applicationsCovered)} applications this scenario's document volume implies.`}
-                />
-                <Figure
-                  label="Cost per document"
-                  value={formatInr(costPerDocument)}
-                  note={`Derived from pages read at ${VOLUME.pagesPerDocument} pages per document, not from a per-document price.`}
-                />
-                <Figure
-                  label="Rate card rows unset"
-                  value={formatCount(unsetRateCardRows)}
-                  tone={unsetRateCardRows > 0 ? "amber" : undefined}
-                  note="Left blank rather than guessed, which is why the spend figure is a floor and not a total."
-                />
-              </div>
+                {breakdown === "product" ? (
+                  <ul>
+                    {byProduct.map((row) => {
+                      const rate = RATE_CARD.find((card) => card.product === row.product);
+                      const priced = rate?.inrPerUnit !== null && rate?.inrPerUnit !== undefined;
+                      return (
+                        <li
+                          key={row.product}
+                          className="gv-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5"
+                        >
+                          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
+                            <span className="text-[13px] font-medium text-ink">{row.label}</span>
+                            <span className="gv-id text-ink-4">{row.product}</span>
+                          </span>
+                          {priced ? (
+                            <Chip tone="slate" mono>
+                              ₹{rate.inrPerUnit!.toFixed(2)}/{rate.unit}
+                            </Chip>
+                          ) : (
+                            <Chip tone="amber">Rate not set</Chip>
+                          )}
+                          <dl className="col-span-2 flex flex-wrap gap-x-4 gap-y-0.5">
+                            <Pair label="Requests" value={formatCount(row.requests)} />
+                            <Pair label="Cost" value={formatInr(row.cost)} />
+                          </dl>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <>
+                    <ul>
+                      {shownRows.map((row) => (
+                        <li key={row.name} className="gv-row grid gap-x-3 gap-y-1 px-4 py-2.5">
+                          {/* Agent ids are snake_case machine names and read as
+                              words once the underscores go. A tenant id is an
+                              identifier that Runs and the audit trail print
+                              verbatim, so it stays exactly as the API sent it —
+                              a prettified tenant name is one somebody cannot
+                              search for. */}
+                          <span className="min-w-0 text-[13px] font-medium text-ink">
+                            {breakdown === "agent" ? row.name.replace(/_/g, " ") : row.name}
+                          </span>
+                          <dl className="flex flex-wrap gap-x-4 gap-y-0.5">
+                            <Pair label="Requests" value={formatCount(row.requests)} />
+                            <Pair label="Cost" value={formatInr(row.cost)} />
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* A truncated list that does not say it is truncated is a
+                        list somebody adds up and finds short of the spend
+                        figure above. */}
+                    {hiddenRows > 0 ? (
+                      <p className="border-t border-line-2 px-4 py-2.5 text-[12.5px] text-ink-3">
+                        {formatCount(hiddenRows)} further{" "}
+                        {breakdown === "agent"
+                          ? hiddenRows === 1
+                            ? "agent is"
+                            : "agents are"
+                          : hiddenRows === 1
+                            ? "tenant is"
+                            : "tenants are"}{" "}
+                        not listed. Their spend is in the figure above.
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </section>
             </>
           )}
 
@@ -825,6 +848,32 @@ export default function UsagePage() {
   );
 }
 
+/**
+ * Requests and rupees per name, heaviest spend first.
+ *
+ * Agents and tenants are grouped identically, so they are grouped by the same
+ * function rather than by two loops that could drift apart. The secondary sort
+ * on requests is what keeps the order sensible when every cost is zero: with an
+ * incomplete rate card that is the normal case, not the edge case, and a sort
+ * on cost alone would shuffle those rows arbitrarily between renders.
+ */
+function groupByName(
+  rows: UsageRow[],
+  name: (row: UsageRow) => string,
+): { name: string; requests: number; cost: number }[] {
+  const map = new Map<string, { name: string; requests: number; cost: number }>();
+  for (const row of rows) {
+    const key = name(row);
+    const bucket = map.get(key) ?? { name: key, requests: 0, cost: 0 };
+    bucket.requests += row.requests;
+    bucket.cost += row.cost_inr;
+    map.set(key, bucket);
+  }
+  return Array.from(map.values())
+    .map((bucket) => ({ ...bucket, cost: Number(bucket.cost.toFixed(2)) }))
+    .sort((a, b) => b.cost - a.cost || b.requests - a.requests);
+}
+
 function Pair({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
@@ -833,4 +882,3 @@ function Pair({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

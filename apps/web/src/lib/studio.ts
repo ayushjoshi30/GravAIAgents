@@ -272,14 +272,45 @@ export function blankWorkflow(name = "Untitled agent"): WorkflowDefinition {
         id: "input",
         type: "input",
         name: "Input",
-        config: { schema: { loan_id: "string" } },
+        // No declared schema, deliberately.
+        //
+        // This used to seed `{ loan_id: "string" }`, which put a field nobody
+        // asked for into every new workflow and made declaring one look like a
+        // required first step. It is not: in the engine `input.schema` is
+        // optional, the node's only output is `payload: object` — whatever the
+        // caller sent — and every node downstream reads the shared state rather
+        // than a typed port. A new canvas therefore accepts anything, which is
+        // both the honest default and the one people usually want, since the
+        // input to a step is normally an earlier step's output or a payload
+        // some API posted in its own shape.
+        config: {},
         position: { x: 80, y: 200 },
       },
       {
         id: "output",
         type: "output",
         name: "Output",
-        config: { mapping: { decision: "{{workflow.facts.decision}}" } },
+        // No mapping either, for the same reason as the Input node above.
+        //
+        // This used to seed `{ decision: "{{workflow.facts.decision}}" }`. That
+        // was worse than it looked: the engine renders output expressions
+        // strictly, so on any workflow that did not happen to publish a fact
+        // called `decision` — which is every new one — the seed resolved to
+        // null and pushed "output mapping — decision: ..." into the run's
+        // warnings. A starter value that makes a clean run look faulty teaches
+        // people to ignore warnings, which is the opposite of what this product
+        // needs.
+        //
+        // THE TRADE, STATED PLAINLY. An empty mapping returns `{}` rather than
+        // the whole state — `_output` builds its answer only from the keys it
+        // is given. So a workflow answers with nothing until someone names a
+        // field. That is the correct default: what a deployed agent returns is
+        // its public contract, and guessing it on a tenant's behalf is how you
+        // end up with an endpoint that promises a field nobody meant.
+        //
+        // The expression syntax stays discoverable through the field's own help
+        // in the config panel, which is where a person is when they need it.
+        config: {},
         position: { x: 720, y: 200 },
       },
     ],

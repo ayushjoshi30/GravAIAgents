@@ -27,6 +27,15 @@ import {
  * globals.css reaches every chart. Series colours are the six-step
  * brand-led categorical ramp; semantic green and red are reserved for pass
  * and fail and never used to separate one series from another.
+ *
+ * `StackedBars`, `UtilisationLine` and `SharePie` are currently rendered by no
+ * page. Usage was the last caller and dropped all three when it was cut back to
+ * the figures somebody acts on — see the note above each one for which chart
+ * went and why. They are kept because they are generic and correct, and because
+ * deleting a shared export while other console pages are being edited breaks a
+ * build for no gain. Before reaching for one of them, check that the chart earns
+ * its place: a bar per category that a reader could have read as a list of
+ * numbers is a table drawn slowly.
  */
 
 export const SERIES = [
@@ -121,6 +130,12 @@ export function ChartFrame({
   );
 }
 
+/**
+ * Not rendered anywhere at present. Usage used it for "spend by agent", ten
+ * bars a reader scanned top to bottom to find the expensive agent; that is now
+ * ten rows of a table with the rupee figure written out, which is the same
+ * scan without the axis.
+ */
 export function StackedBars({
   data,
   xKey,
@@ -219,6 +234,14 @@ export function TrendArea({
   );
 }
 
+/**
+ * Not rendered anywhere at present. Usage used it for "utilisation by hour of a
+ * business day", a line driven by a hard-coded peaky weight profile — a shape
+ * the console invented rather than measured, telling the reader only what the
+ * utilisation figure already said. The component stays: the day the governor
+ * endpoint reports a series, a real queue-depth line with a ceiling on it is
+ * exactly what this draws.
+ */
 export function UtilisationLine({
   data,
   xKey,
@@ -313,6 +336,11 @@ export function BacklogProjection({
   );
 }
 
+/**
+ * Not rendered anywhere at present. Usage used it for "spend by tenant", a ring
+ * of a handful of slices whose only content was a handful of rupee figures, and
+ * a proportion nobody topped up a budget or chased a provider over.
+ */
 export function SharePie({
   data,
   formatter,

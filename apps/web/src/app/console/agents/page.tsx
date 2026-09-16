@@ -18,6 +18,7 @@
  * task for a person.
  */
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { ConsolePage } from "@/components/console/ConsoleShell";
 import { AgentPipeline } from "@/components/agents/AgentPipeline";
@@ -685,6 +686,30 @@ export default function ConsoleAgentsPage() {
     <ConsolePage
       title="Agents"
       description="Set the inputs, run any agent against the connected environment, and read exactly what it produced — the same runner the MCP server uses."
+      actions={
+        /* The way out of the catalog and into the builder.
+           
+           It belongs here rather than only in the sidebar because this is the
+           page where someone forms the thought. They have just read what the
+           fourteen agents do, found that none of them is quite the job they
+           have, and the next thing they want is to put three of them in a row
+           themselves. A nav item halfway down a sidebar does not meet that
+           thought; a button at the top of the page they are already reading
+           does.
+           
+           It is a link, not a button that navigates — so it opens in a new tab
+           on a middle click, can be copied, and tells the browser where it
+           goes. The Studio takes over the whole screen, which is a big enough
+           change of context that being able to open it in a second tab and keep
+           the catalog in the first one is worth having. */
+        <Link
+          href="/console/studio"
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[6px] bg-navy px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-navy-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+        >
+          <Icon name="bolt" size={14} />
+          Build your own agent
+        </Link>
+      }
     >
       {!token ? (
         <p className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-border bg-amber-soft p-3.5 text-[12.5px] leading-relaxed text-amber-strong">

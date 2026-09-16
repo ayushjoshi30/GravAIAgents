@@ -30,6 +30,13 @@ import { useResource } from "@/lib/useResource";
 const STRIP_LENGTH = 24;
 
 /**
+ * One page of the log. Named because the listing has to say when it fills up:
+ * an auditor reading a truncated chain needs to know it was truncated, which is
+ * the only part of the old "entries" figure anybody could have acted on.
+ */
+const AUDIT_PAGE_LIMIT = 1000;
+
+/**
  * No chain until the API hands one over.
  *
  * A written-out chain of plausible entries and plausible hashes used to stand
@@ -57,7 +64,7 @@ export default function AuditExplorerPage() {
 
   const audit = useResource(
     `audit:${token ?? "none"}`,
-    (signal) => api.listAudit(token, { limit: 1000 }, signal),
+    (signal) => api.listAudit(token, { limit: AUDIT_PAGE_LIMIT }, signal),
     NO_ENTRIES,
   );
 
@@ -79,6 +86,14 @@ export default function AuditExplorerPage() {
         return false;
       if (!needle) return true;
       return (
+        // Sequence is matched whole, and with an optional leading "#" so the
+        // number can be pasted the way the rows and the strip print it. Whole
+        // rather than as a substring because "broken at sequence 412" must land
+        // on 412 and not also on 4120. Verification names a sequence and this is
+        // the only way to reach the row it names: the strip draws the newest
+        // links, and a break is usually older than those.
+        String(entry.seq) === needle ||
+        (needle.startsWith("#") && String(entry.seq) === needle.slice(1)) ||
         entry.actor_id.toLowerCase().includes(needle) ||
         entry.action.toLowerCase().includes(needle) ||
         entry.entity_id.toLowerCase().includes(needle) ||
@@ -227,45 +242,28 @@ export default function AuditExplorerPage() {
         <VerifyReport verify={verify} />
       </section>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <Figure
-          label="Entries"
-          value={answered ? formatCount(audit.data.length) : "—"}
-          note={
-            answered
-              ? "The most recent 1,000 the API will return in one page, newest first."
-              : "No entry has been read, so there is no count to report."
-          }
-        />
-        <Figure
-          label="Matching filters"
-          value={answered ? formatCount(filtered.length) : "—"}
-          note={
-            !answered
-              ? "Filters apply to entries that were read. None were."
-              : filtersApplied
-                ? "Filtering narrows what is listed below; it never changes the chain."
-                : "No filter applied, so this is every entry read above."
-          }
-        />
-        <Figure
-          label="Distinct actions"
-          value={answered ? formatCount(actions.length) : "—"}
-          note="Action names seen in these entries, not the full vocabulary the API can write."
-        />
-        <Figure
-          label="Retention"
-          value="8 years"
-          note="The regulatory minimum this platform is built to. Configurable upwards per tenant, never downwards."
-        />
-      </div>
+      {/* Four figures stood between the chain and the entries: how many entries
+          were read, how many matched the filters, how many distinct actions
+          appeared among them, and the retention period. Nobody acts on any of
+          the four. The first two were counts of the list immediately below them,
+          the third was analysis the Action filter already does better by naming
+          the actions rather than counting them, and retention is policy rather
+          than a reading — it is stated as policy in the note at the foot of this
+          page instead. Nothing that helps anyone prove the chain is intact was
+          touched: verification, its entry count and the first bad sequence stay
+          where the chain is drawn.
+
+          What the entries figure alone could tell a reader — that the page was
+          full, so the chain continues past the oldest row shown — is kept below
+          the listing, where it is a caveat on the rows rather than a statistic
+          about them. */}
 
       <div className="gv-card grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
         <TextField
           label="Search"
           value={query}
           onChange={setQuery}
-          placeholder="Actor, action, entity or hash prefix"
+          placeholder="Sequence, actor, action, entity or hash prefix"
           type="search"
         />
         <SelectField
@@ -322,6 +320,18 @@ export default function AuditExplorerPage() {
               ))}
             </ul>
           )}
+
+          {/* Shown only when it is true. A listing that stops at the page limit
+              is the one case where the number of rows read means something to an
+              auditor, because the chain carries on past the oldest one here. */}
+          {answered && audit.data.length >= AUDIT_PAGE_LIMIT ? (
+            <p className="border-t border-line-2 px-4 py-2.5 text-[11.5px] leading-relaxed text-ink-3">
+              This is one full page of {formatCount(AUDIT_PAGE_LIMIT)} entries, newest first, so
+              the chain continues past the oldest row listed. Verification is unaffected: it
+              recomputes every entry for this tenant from the genesis hash, not only the ones
+              read here.
+            </p>
+          ) : null}
         </section>
 
         <aside aria-label="Entry detail" className="gv-card min-w-0 overflow-hidden">
@@ -390,7 +400,9 @@ export default function AuditExplorerPage() {
         all tenants and leak activity volume between them. Timestamps are canonicalised before
         hashing so the digest does not depend on whether the database dialect stored an aware or
         a naive datetime — a bug that once made every chain fail verification after a reload,
-        and the reason the hash format is now frozen and versioned with the chain.
+        and the reason the hash format is now frozen and versioned with the chain. Entries are
+        retained for eight years, the regulatory minimum this platform is built to; a tenant can
+        be configured upwards, never downwards.
       </InlineNote>
     </div>
   );
@@ -445,7 +457,7 @@ function VerifyReport({ verify }: { verify: VerifyState }) {
           note={
             result.first_bad_seq === null
               ? "Every hash followed the one before it."
-              : "An investigation starts at this row rather than at the whole table."
+              : "Search this number below to open the row an investigation starts from."
           }
         />
         <div>

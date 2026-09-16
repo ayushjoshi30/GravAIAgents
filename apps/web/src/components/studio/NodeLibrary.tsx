@@ -10,19 +10,18 @@
  *
  * Dragging sets a plain `text/plain` payload of the node type. Dropping is
  * handled by the canvas, which knows where the pointer landed.
+ *
+ * Every row is drawn with the canvas's own plate and its own chip, imported
+ * rather than reimplemented, so a node looks the same in the rail as it will
+ * once it is placed — which is the point of a rail, and was not true while the
+ * rail drew a grey glyph for a node the canvas drew in violet.
  */
 
 import { useMemo, useState } from "react";
-import { AgentIcon, Icon, type IconName } from "@/components/icons/AgentIcon";
+import { Icon } from "@/components/icons/AgentIcon";
+import { NodePlate } from "@/components/studio/StudioNode";
 import { TextField } from "@/components/ui/Field";
 import type { NodeFamily, StudioNodeSpec } from "@/lib/studio";
-
-function Glyph({ spec }: { spec: StudioNodeSpec }) {
-  if (spec.type.startsWith("agent.")) {
-    return <AgentIcon id={spec.type.slice("agent.".length)} size={15} />;
-  }
-  return <Icon name={(spec.icon || "bolt") as IconName} size={14} />;
-}
 
 function LibraryItem({ spec, onAdd }: { spec: StudioNodeSpec; onAdd: (type: string) => void }) {
   return (
@@ -36,20 +35,33 @@ function LibraryItem({ spec, onAdd }: { spec: StudioNodeSpec; onAdd: (type: stri
         }}
         onClick={() => onAdd(spec.type)}
         title={spec.caveat ? `${spec.summary}\n\n${spec.caveat}` : spec.summary}
-        className="group flex w-full cursor-grab items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition-colors hover:border-line hover:bg-surface-2 active:cursor-grabbing"
+        className="group flex w-full cursor-grab items-center gap-2 rounded-lg border border-transparent px-2 py-[7px] text-left transition-colors hover:border-line hover:bg-surface-2 active:cursor-grabbing"
       >
-        <span className="mt-px shrink-0 text-ink-3 group-hover:text-brand">
-          <Glyph spec={spec} />
+        {/* A node the API offers but this build's generated catalog has not
+            heard of gets the palette's neutral slate and its own initial, the
+            same as it would on the canvas. The rail is where that case is most
+            likely to show up first, since the library is fetched. */}
+        <span className="shrink-0">
+          <NodePlate type={spec.type} label={spec.label} size={22} />
         </span>
+        {/* The name alone, as the reference has it.
+            
+            Every row carried a truncated summary under it, which at 210px wide
+            meant about five words and an ellipsis — enough to notice, never
+            enough to learn anything from, and thirty-one of them turned the
+            rail into a wall. The full summary is still one hover away in the
+            row's `title`, it is printed in full on the node once the block is
+            placed, and it is on the agent's own page in the catalog. A rail is
+            for finding something you already mean to place. */}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12.5px] font-medium text-ink">{spec.label}</span>
-          <span className="block truncate text-[11px] text-ink-3">{spec.summary}</span>
         </span>
-        {spec.uses_llm ? (
-          <span className="mt-0.5 shrink-0 rounded bg-brand-50 px-1 py-px text-[9.5px] font-medium text-brand">
-            model
-          </span>
-        ) : null}
+        {/* The chip used to read "model" in navy, and to say nothing at all on
+            the nodes that are code. Navy is this palette's word for "code
+            decided", so the rail was printing the opposite of what it meant on
+            exactly the distinction the platform is built to make. It now shows
+            the canvas's chip: teal "model", navy "code", every row. */}
+
       </button>
     </li>
   );
@@ -133,8 +145,16 @@ export function NodeLibrary({
       </div>
 
       <p className="border-t border-line px-3 py-2 text-[11px] leading-relaxed text-ink-3">
-        Drag onto the canvas, or click to drop one in the middle. Every node here has a real
-        executor behind it.
+        {/* Four sentences became one.
+            
+            The rest said that every node has a real executor, and what the
+            model and code markers mean. Both are true and neither survives
+            being read twice: the markers are on every row in the list below,
+            where someone meets them in context, and "these are real" is not
+            something a person needs restated every time they open the panel.
+            The one instruction that is genuinely non-obvious — that clicking
+            works as well as dragging — is what stayed. */}
+        Drag onto the canvas, or click to drop one in the middle.
       </p>
     </div>
   );
