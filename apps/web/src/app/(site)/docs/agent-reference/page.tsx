@@ -1,12 +1,39 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { hueStyle } from "@/components/build/blocks";
 import { AGENTS, TIERS } from "@/lib/agents";
+import { NODE_BY_TYPE } from "@/lib/nodeCatalog";
 
 export const metadata: Metadata = {
   title: "Agent reference",
   description:
     "Generated reference for all fourteen GravAI agents: MCP tool name, required scopes, authority, tools, guardrails, escalation triggers and eval gates.",
 };
+
+/** The agent's hue, from the generated node registry. Never chosen here. */
+function agentHue(id: string): string {
+  return NODE_BY_TYPE[`agent.${id}`]?.hue ?? "slate";
+}
+
+/**
+ * The agent's colour chip, as it appears everywhere else in the product.
+ *
+ * A reference page is read with a console or a canvas open beside it, and the
+ * one thing that page cannot otherwise offer is "this is the agent whose nodes
+ * are the blue ones". The chip is `aria-hidden` and always sits against the
+ * agent's own name: it is a convenience for a reader matching this page to a
+ * screen, never the way anything here is identified. The reference loses
+ * nothing at all with colour switched off.
+ */
+function HueMark({ id }: { id: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={hueStyle(agentHue(id))}
+      className="mr-2 inline-block h-2.5 w-2.5 rounded-[3px] bg-[var(--plate-accent)] align-middle"
+    />
+  );
+}
 
 /**
  * Generated from src/lib/agents.ts, which transcribes the platform's own
@@ -23,6 +50,12 @@ export default function AgentReferencePage() {
         section 4 of the platform specification. If an agent is not in that catalog, it is
         not in this reference and it is not on this site.
       </p>
+      <p>
+        The square beside each name is that agent&apos;s colour, generated from the engine&apos;s
+        node registry. It is the same colour the agent wears in the catalog, on its own page
+        and on the studio canvas, which is what makes this reference matchable to a screen at
+        a glance. Nothing on this page is identified by it.
+      </p>
 
       <h2>Index</h2>
       <table>
@@ -38,6 +71,7 @@ export default function AgentReferencePage() {
           {AGENTS.map((agent) => (
             <tr key={agent.id}>
               <td>
+                <HueMark id={agent.id} />
                 <a href={`#${agent.id}`}>{agent.name}</a>
               </td>
               <td>
@@ -60,6 +94,7 @@ export default function AgentReferencePage() {
           {AGENTS.filter((agent) => agent.tier === tier.tier).map((agent) => (
             <section key={agent.id}>
               <h3 id={agent.id}>
+                <HueMark id={agent.id} />
                 {agent.name} — <code>{agent.id}</code>
               </h3>
               <p>{agent.detail.purpose}</p>

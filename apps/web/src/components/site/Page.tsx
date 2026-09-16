@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Eyebrow } from "@/components/ui/Surface";
+import { hueStyle } from "@/components/build/blocks";
 
 /**
  * Marketing page scaffolding.
@@ -11,7 +12,33 @@ import { Eyebrow } from "@/components/ui/Surface";
  *
  * `Container` and `Section` are unchanged in behaviour and are still the right
  * answer inside a band, or on a page that does not want bands at all.
+ *
+ * A band, a section and a page header can each be given a HUE, which paints
+ * the ground in that hue's softest step and publishes the hue's four steps to
+ * everything inside as custom properties. Spend it sparingly: one or two
+ * coloured grounds down a page make the white ones read as deliberate, while a
+ * page where every band is tinted has no rhythm left and is worse than a page
+ * with none. The reserved three — green, amber and rose — belong to outcome
+ * and must never be handed to a band as decoration.
  */
+
+/**
+ * The ground and edge for a hued band, or nothing when no hue was asked for.
+ *
+ * Two grounds are excluded by construction. `deep` and `inverse` carry white
+ * text, and repainting either with a pale tint would leave that text on a
+ * surface it cannot be read against — so those two keep their own ground and
+ * the hue is dropped entirely rather than half-applied, which would publish a
+ * plate to the children of a band whose text is white.
+ *
+ * The background is written as `var(--plate)` rather than as the hue token
+ * directly, so a band and everything nested in it agree about which value the
+ * plate is even if the properties are later overridden further down the tree.
+ */
+function hueGround(hue: string | undefined, tone: BandTone) {
+  if (!hue || tone === "deep" || tone === "inverse") return undefined;
+  return { ...hueStyle(hue), background: "var(--plate)" };
+}
 
 export function Container({
   children,
@@ -39,17 +66,26 @@ export function Section({
   id,
   bordered = true,
   size = "md",
+  hue,
 }: {
   children: ReactNode;
   className?: string;
   id?: string;
   bordered?: boolean;
   size?: keyof typeof SECTION_SIZE;
+  /**
+   * A categorical hue name — violet, indigo, blue, cyan, teal, navy, pink,
+   * orange or slate. A section owns no ground, so the hue reaches two things:
+   * its top hairline, and the four plate properties every card and badge
+   * inside it can read. Omit it and the section is byte-for-byte what it was.
+   */
+  hue?: string;
 }) {
   return (
     <section
       id={id}
-      className={`${bordered ? "border-t border-line" : ""} ${SECTION_SIZE[size]} ${className ?? ""}`}
+      style={hue ? hueStyle(hue) : undefined}
+      className={`${bordered ? `border-t ${hue ? "border-[var(--plate-border)]" : "border-line"}` : ""} ${SECTION_SIZE[size]} ${className ?? ""}`}
     >
       {children}
     </section>
@@ -91,11 +127,14 @@ const BAND_PATTERN: Record<BandPattern, string> = {
  * and it puts a `Container` around whatever you give it.
  *
  * Alternate the tones down a page — white, soft, white, tint — and use
- * `inverse` at most once, for the closing call to action.
+ * `inverse` at most once, for the closing call to action. A `hue` replaces the
+ * ground with a colour from the categorical palette; one or two down a page,
+ * never more.
  */
 export function Band({
   children,
   tone = "white",
+  hue,
   pattern = "none",
   size = "md",
   bordered = false,
@@ -107,6 +146,19 @@ export function Band({
 }: {
   children: ReactNode;
   tone?: BandTone;
+  /**
+   * A categorical hue name — violet, indigo, blue, cyan, teal, navy, pink,
+   * orange or slate. It repaints the band's ground in that hue's softest step
+   * and publishes all four steps to the band's children, so a card or badge
+   * inside can pick the colour up without being told it twice.
+   *
+   * Never green, amber or rose: those three mean a run proceeded, a rule
+   * flagged risk, or a run stopped, and a band that borrows one of them makes
+   * every genuine outcome on the site harder to trust.
+   *
+   * `deep` and `inverse` ignore it — see `hueGround` for why.
+   */
+  hue?: string;
   pattern?: BandPattern;
   size?: keyof typeof SECTION_SIZE;
   /** A hairline along the top edge. Only needed between two bands of the
@@ -118,10 +170,15 @@ export function Band({
   innerClassName?: string;
   as?: "section" | "div" | "header" | "footer";
 }) {
+  const ground = hueGround(hue, tone);
   return (
     <Tag
       id={id}
-      className={`${BAND_TONE[tone]} ${BAND_PATTERN[pattern]} ${bordered ? "border-t border-line" : ""} ${SECTION_SIZE[size]} ${className ?? ""}`}
+      style={ground}
+      /* The tone class is kept even when a hue overrides the ground, so a band
+         that loses its hue falls back to the ground it was always going to
+         have rather than to nothing at all. */
+      className={`${BAND_TONE[tone]} ${BAND_PATTERN[pattern]} ${bordered ? `border-t ${ground ? "border-[var(--plate-border)]" : "border-line"}` : ""} ${SECTION_SIZE[size]} ${className ?? ""}`}
     >
       <Container width={width} className={innerClassName}>
         {children}
@@ -149,6 +206,7 @@ export function PageHeader({
   aside,
   actions,
   pattern = "radial",
+  hue,
   className,
 }: {
   eyebrow: string;
@@ -158,16 +216,30 @@ export function PageHeader({
   /** Buttons under the lede. */
   actions?: ReactNode;
   pattern?: BandPattern;
+  /**
+   * A categorical hue name, which tints the header's ground and its eyebrow
+   * and publishes the four plate steps to the aside. Use it to give a page a
+   * colour of its own at the top; leave it off and the header is the white
+   * ground with the brand light it has always been.
+   */
+  hue?: string;
   className?: string;
 }) {
+  const ground = hueGround(hue, "white");
   return (
     <div
-      className={`gv-band-white ${BAND_PATTERN[pattern]} border-b border-line ${className ?? ""}`}
+      style={ground}
+      className={`gv-band-white ${BAND_PATTERN[pattern]} border-b ${ground ? "border-[var(--plate-border)]" : "border-line"} ${className ?? ""}`}
     >
       <Container className="py-14 sm:py-20">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-16">
           <div className="min-w-0">
-            <Eyebrow tick className="mb-4 text-brand">
+            {/* The eyebrow takes the hue's `-strong` step because it is sitting
+                on that hue's soft plate. Its leading tick keeps the brand
+                gradient it is drawn with in globals.css — a 24px navy rule in
+                front of coloured text reads as the wordmark agreeing with the
+                page rather than as a mismatch. */}
+            <Eyebrow tick className={`mb-4 ${ground ? "text-[var(--plate-strong)]" : "text-brand"}`}>
               {eyebrow}
             </Eyebrow>
             <h1 className="gv-display-sm max-w-3xl">{title}</h1>

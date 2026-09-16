@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GravAIWordmark } from "@/brand/Logo";
+import { hueStyle } from "@/components/build/blocks";
 import { AgentIcon, Icon } from "@/components/icons/AgentIcon";
 import { Arrow } from "@/components/ui/Button";
 import { AGENTS, TIERS } from "@/lib/agents";
+import { NODE_BY_TYPE } from "@/lib/nodeCatalog";
 
 const NAV = [
   { href: "/platform", label: "Platform" },
@@ -110,6 +112,27 @@ function Chevron({ size = 14, className }: { size?: number; className?: string }
 function menuLabel(name: string) {
   const short = name.replace(/\s+Agent$/, "");
   return short.includes(" ") ? short : name;
+}
+
+/**
+ * An agent's hue, read from the generated node catalog rather than chosen in
+ * this file.
+ *
+ * `lib/nodeCatalog.ts` is generated from the engine's registry and a test
+ * fails when the two disagree, so the hue an agent wears in this menu is the
+ * hue it wears on the catalog page, on its own page and on the studio canvas.
+ * A menu that picked its own colours would be a fourth answer to a question
+ * that already has one, and the failure would be silent. An id the catalog
+ * does not know falls back to the neutral slate rather than to an invented
+ * colour.
+ *
+ * It has to be resolved through `hueStyle` rather than by interpolating the
+ * hue into a class name: Tailwind builds its stylesheet by reading the source
+ * for complete class names, so `bg-${hue}-soft` produces no rule at all and
+ * fails by rendering nothing.
+ */
+function agentHue(id: string): string {
+  return NODE_BY_TYPE[`agent.${id}`]?.hue ?? "slate";
 }
 
 /**
@@ -301,14 +324,24 @@ export function SiteHeader() {
                             <ul className={wide ? "grid grid-cols-2 gap-x-1" : undefined}>
                               {column.agents.map((agent) => (
                                 <li key={agent.id}>
+                                  {/* The four `--plate-*` properties are set on
+                                      the row and read by the plate and the
+                                      label beneath it, so one hue lookup
+                                      colours the whole entry. At rest the hue
+                                      is the icon plate alone; hovering fills
+                                      the row with the same family and darkens
+                                      the label to the `-strong` step, which is
+                                      the one that holds contrast on a soft
+                                      plate. */}
                                   <Link
                                     href={`/agents/${agent.id}`}
-                                    className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 ease-gv hover:bg-brand-50"
+                                    style={hueStyle(agentHue(agent.id))}
+                                    className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 ease-gv hover:bg-[var(--plate)]"
                                   >
-                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-ink-3 transition-colors duration-150 ease-gv group-hover:border-brand-200 group-hover:bg-surface group-hover:text-brand">
+                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)] transition-colors duration-150 ease-gv group-hover:bg-surface">
                                       <AgentIcon id={agent.id} size={15} />
                                     </span>
-                                    <span className="min-w-0 text-[12.5px] font-medium leading-snug text-ink-2 transition-colors duration-150 ease-gv group-hover:text-brand">
+                                    <span className="min-w-0 text-[12.5px] font-medium leading-snug text-ink-2 transition-colors duration-150 ease-gv group-hover:text-[var(--plate-strong)]">
                                       {menuLabel(agent.name)}
                                     </span>
                                   </Link>
@@ -328,12 +361,23 @@ export function SiteHeader() {
                         All {AGENTS.length} agents
                         <Arrow />
                       </Link>
-                      <Link
-                        href="/docs/agent-reference"
-                        className="rounded text-[12.5px] font-medium text-ink-3 transition-colors duration-150 ease-gv hover:text-brand"
-                      >
-                        Agent reference
-                      </Link>
+                      {/* The build path again, where someone who has just read
+                          the catalog is most likely to want it. */}
+                      <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <Link
+                          href="/docs/agent-reference"
+                          className="rounded text-[12.5px] font-medium text-ink-3 transition-colors duration-150 ease-gv hover:text-brand"
+                        >
+                          Agent reference
+                        </Link>
+                        <Link
+                          href="/build"
+                          className="gv-header-arrow inline-flex items-center gap-1.5 rounded text-[12.5px] font-medium text-ink-3 transition-colors duration-150 ease-gv hover:text-brand"
+                        >
+                          Build your own agent
+                          <Arrow />
+                        </Link>
+                      </span>
                     </div>
                   </div>
                 ) : null}
@@ -342,12 +386,26 @@ export function SiteHeader() {
           })}
         </nav>
 
+        {/* Two destinations, ranked rather than balanced. Sketching an agent
+            needs no token and no account, so it is the filled control and the
+            one that keeps its arrow; the console is a real destination for
+            anyone who already has a tenant, so it stays a button beside it
+            rather than being demoted into the overflow menu. The console drops
+            out first on a narrow viewport because the mobile navigation below
+            carries both, and it is the one of the two that a first-time
+            visitor cannot use yet. */}
         <div className="ml-auto flex items-center gap-2">
           <Link
             href="/console"
-            className="gv-btn gv-btn-primary gv-header-arrow hidden h-9 items-center gap-1.5 border px-3.5 text-[13px] sm:inline-flex"
+            className="gv-btn gv-btn-secondary hidden h-9 items-center border px-3.5 text-[13px] md:inline-flex"
           >
             Open console
+          </Link>
+          <Link
+            href="/build"
+            className="gv-btn gv-btn-primary gv-header-arrow hidden h-9 items-center gap-1.5 border px-3.5 text-[13px] sm:inline-flex"
+          >
+            Build an agent
             <Arrow />
           </Link>
           <button
@@ -428,12 +486,13 @@ export function SiteHeader() {
                         <li key={agent.id}>
                           <Link
                             href={`/agents/${agent.id}`}
-                            className="group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-ink-2 transition-colors duration-150 ease-gv hover:bg-brand-50 hover:text-brand"
+                            style={hueStyle(agentHue(agent.id))}
+                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] text-ink-2 transition-colors duration-150 ease-gv hover:bg-[var(--plate)] hover:text-[var(--plate-strong)]"
                           >
                             <AgentIcon
                               id={agent.id}
                               size={15}
-                              className="shrink-0 text-ink-3 transition-colors duration-150 ease-gv group-hover:text-brand"
+                              className="shrink-0 text-[var(--plate-accent)]"
                             />
                             {menuLabel(agent.name)}
                           </Link>
@@ -444,13 +503,23 @@ export function SiteHeader() {
                 </li>
               );
             })}
+            {/* The same two destinations in the same order as the desktop
+                cluster, both full width, so neither is buried on a phone. */}
             <li className="pt-2">
               <Link
-                href="/console"
+                href="/build"
                 className="gv-btn gv-btn-primary gv-header-arrow flex h-11 w-full items-center justify-center gap-1.5 border text-[14px]"
               >
-                Open console
+                Build your own agent
                 <Arrow />
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/console"
+                className="gv-btn gv-btn-secondary flex h-11 w-full items-center justify-center border text-[14px]"
+              >
+                Open console
               </Link>
             </li>
           </ul>

@@ -6,7 +6,8 @@ import {
   RunTimelineDiagram,
 } from "@/components/diagrams/PlatformDiagrams";
 import { ThreePlanes } from "@/components/diagrams/ThreePlanes";
-import { Icon } from "@/components/icons/AgentIcon";
+import { hueStyle } from "@/components/build/blocks";
+import { Icon, type IconName } from "@/components/icons/AgentIcon";
 import { Band, PageHeader, Rule, StepList } from "@/components/site/Page";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Arrow, ButtonLink, TextLink } from "@/components/ui/Button";
@@ -25,6 +26,30 @@ export const metadata: Metadata = {
   description:
     "How GravAI is built: three planes, Temporal for durable agent runs, a 10 req/min rate governor, MCP and REST at the edge, and PostgreSQL row-level security per tenant.",
 };
+
+/**
+ * WHAT COLOUR MEANS ON THIS PAGE, AND WHAT IT DELIBERATELY DOES NOT.
+ *
+ * This is the longest page on the site — seven sections, four diagrams and
+ * about thirty discrete claims — and its old problem was that everything on it
+ * was the same blue, so nothing on it had a shape. The categorical palette is
+ * spent here on LISTS WHOSE MEMBERS ARE PEERS: the six AI capabilities, the
+ * four properties of the MCP edge, the four links of the adapter chain, the
+ * three layers of tenant isolation. In each of those a hue is a name, the name
+ * is printed next to it, and the set is small enough that the colours stay
+ * distinguishable.
+ *
+ * Three hues never appear below. Green, amber and rose are the platform's
+ * outcome colours — proceeded, at risk, stopped — and the only amber on this
+ * page is on the open questions and the SQLite caveat, where attention is
+ * exactly what is meant. Teal is withheld for a different reason, spelled out
+ * at `CAPABILITY_HUES`.
+ *
+ * The four diagrams are not touched. They are drawn in brand blue by components
+ * this page does not own, and a coloured frame around a monochrome drawing
+ * makes the drawing look unfinished rather than making the page look designed —
+ * so the hue stops at the text and the cards around them.
+ */
 
 const TEMPORAL_REASONS = [
   {
@@ -81,55 +106,76 @@ const TEMPORAL_REASONS = [
   },
 ];
 
-/** The four properties of the MCP edge, each one a mitigation rather than a feature. */
-const MCP_POINTS: { icon: "grid" | "bolt" | "shield" | "chain"; title: string; body: ReactNode }[] =
-  [
-    {
-      icon: "grid",
-      title: "Systems as tools",
-      body: (
-        <>
-          Read and write annotations on every one: <code className="gv-code">graviton.get_application</code>,{" "}
-          <code className="gv-code">bre.evaluate</code>, <code className="gv-code">docai.extract</code>,{" "}
-          <code className="gv-code">ledger.query</code> (templated, never raw SQL).
-        </>
-      ),
-    },
-    {
-      icon: "bolt",
-      title: "Agents as tools",
-      body: (
-        <>
-          Each returns <code className="gv-code">{"{ run_id, status, result? }"}</code>. Long runs
-          return the run id and stream progress notifications; the result is also readable as a
-          resource.
-        </>
-      ),
-    },
-    {
-      icon: "shield",
-      title: "No token passthrough",
-      body: (
-        <>
-          Tokens are audience-bound to the GravAI MCP server and never forwarded to a downstream
-          system. That is the confused-deputy mitigation, and it is not optional.
-        </>
-      ),
-    },
-    {
-      icon: "chain",
-      title: "Every call is audited",
-      body: (
-        <>
-          Tool name, argument hash, tenant, subject, result hash, latency and decision — one row
-          per call, in the same chain as everything else.
-        </>
-      ),
-    },
-  ];
+/**
+ * The four properties of the MCP edge, each one a mitigation rather than a
+ * feature — and each one a hue, because four cards that all look identical are
+ * four cards a reader has to re-read to tell apart. The hue is carried by the
+ * icon plate, never by the card body, so the four stay a set rather than
+ * becoming four unrelated announcements.
+ */
+const MCP_POINTS: {
+  icon: IconName;
+  hue: string;
+  title: string;
+  body: ReactNode;
+}[] = [
+  {
+    icon: "grid",
+    hue: "blue",
+    title: "Systems as tools",
+    body: (
+      <>
+        Read and write annotations on every one: <code className="gv-code">graviton.get_application</code>,{" "}
+        <code className="gv-code">bre.evaluate</code>, <code className="gv-code">docai.extract</code>,{" "}
+        <code className="gv-code">ledger.query</code> (templated, never raw SQL).
+      </>
+    ),
+  },
+  {
+    icon: "bolt",
+    hue: "violet",
+    title: "Agents as tools",
+    body: (
+      <>
+        Each returns <code className="gv-code">{"{ run_id, status, result? }"}</code>. Long runs
+        return the run id and stream progress notifications; the result is also readable as a
+        resource.
+      </>
+    ),
+  },
+  {
+    icon: "shield",
+    hue: "indigo",
+    title: "No token passthrough",
+    body: (
+      <>
+        Tokens are audience-bound to the GravAI MCP server and never forwarded to a downstream
+        system. That is the confused-deputy mitigation, and it is not optional.
+      </>
+    ),
+  },
+  {
+    icon: "chain",
+    hue: "slate",
+    title: "Every call is audited",
+    body: (
+      <>
+        Tool name, argument hash, tenant, subject, result hash, latency and decision — one row
+        per call, in the same chain as everything else.
+      </>
+    ),
+  },
+];
 
+/**
+ * The three layers of tenant isolation, as a deliberate ramp rather than three
+ * unrelated colours: indigo, blue, cyan is one family getting lighter as the
+ * control moves down the stack, which is the shape of the argument — the same
+ * rule stated three times, at three depths.
+ */
 const TENANCY_LAYERS = [
   {
+    hue: "indigo",
     label: "Layer one · the service",
     body: (
       <>
@@ -140,6 +186,7 @@ const TENANCY_LAYERS = [
     ),
   },
   {
+    hue: "blue",
     label: "Layer two · the database",
     body: (
       <>
@@ -151,6 +198,7 @@ const TENANCY_LAYERS = [
     ),
   },
   {
+    hue: "cyan",
     label: "Layer three · the tests",
     body: (
       <>
@@ -162,12 +210,71 @@ const TENANCY_LAYERS = [
   },
 ];
 
-/** The adapter boundary, drawn left to right. The provider is configuration. */
+/**
+ * The adapter boundary, drawn left to right. The provider is configuration.
+ *
+ * The four links are coloured because the whole point of the drawing is that
+ * they are four DIFFERENT things and only the last one is swappable — which is
+ * why the provider is the slate one. Four identical grey boxes joined by arrows
+ * is a picture of a pipeline; this is a picture of a boundary.
+ */
 const ADAPTER_CHAIN = [
-  { title: "Agent", sub: "codes against a capability" },
-  { title: "Capability", sub: "documents · model · speech" },
-  { title: "One adapter", sub: "governor · ledger · retries" },
-  { title: "Provider", sub: "configuration, not code" },
+  { hue: "violet", title: "Agent", sub: "codes against a capability" },
+  { hue: "pink", title: "Capability", sub: "documents · model · speech" },
+  { hue: "blue", title: "One adapter", sub: "governor · ledger · retries" },
+  { hue: "slate", title: "Provider", sub: "configuration, not code" },
+];
+
+/**
+ * A hue per AI capability, keyed by the catalog's own id.
+ *
+ * TEAL IS DELIBERATELY ABSENT. Everywhere else in this product teal carries a
+ * claim — a language model did this part of the work — and it would be natural
+ * to hand it to the "Language model" card here. It would also be wrong: all six
+ * of these capabilities are model-backed, document intelligence very much
+ * included, so making one of them teal would quietly assert that the other five
+ * are deterministic code. The six get six ordinary hues, and teal keeps meaning
+ * the one thing it means.
+ */
+const CAPABILITY_HUES: Record<string, string> = {
+  model: "violet",
+  documents: "blue",
+  stt: "cyan",
+  tts: "pink",
+  translate: "indigo",
+  lid: "slate",
+};
+
+/**
+ * The glance panel doubles as this page's contents: four rows, in page order,
+ * each naming a section and jumping to it.
+ *
+ * THE HUE HERE IS A MARKER WITHIN THIS LIST AND NOTHING MORE, and it is worth
+ * being exact about that, because the obvious assumption — that the bar beside
+ * "Governor" is the colour the governor section is drawn in — is false and
+ * would be expensive to act on. Two of these four sections carry no hue at all:
+ * `#temporal` and `#throughput` are a spine of reasons and a diagram, neither of
+ * which is a list of peers, so neither was given one. Of the other two,
+ * `#tenancy` runs indigo-blue-cyan and `#mcp` runs four hues of which blue is
+ * only the first. So these four are the same kind of index the security page's
+ * control register uses: four peers, four names printed beside four colours,
+ * telling a reader which row they are on and nothing about what is below.
+ *
+ * If a future change does want a true key, it has to run the other way — give
+ * each section a hue first, then read it back here — rather than recolouring
+ * these rows to match, which would only move the discrepancy somewhere harder
+ * to see.
+ */
+const GLANCE: { hue: string; label: string; value: string; href: string }[] = [
+  { hue: "violet", label: "Orchestration", value: "Temporal", href: "#temporal" },
+  {
+    hue: "cyan",
+    label: "Governor",
+    value: `Redis token bucket · ${DOC_AI_RPM}/min`,
+    href: "#throughput",
+  },
+  { hue: "blue", label: "Edge", value: "MCP (Streamable HTTP) · REST /v1", href: "#mcp" },
+  { hue: "slate", label: "Tenancy", value: "PostgreSQL RLS + service layer", href: "#tenancy" },
 ];
 
 const FIRST_CLASS = new Set(["en-IN", "hi-IN"]);
@@ -209,26 +316,41 @@ export default function PlatformPage() {
                 Operational
               </span>
             </header>
-            <dl className="gv-divide">
-              {[
-                { label: "Orchestration", value: "Temporal" },
-                { label: "Tenancy", value: "PostgreSQL RLS + service layer" },
-                { label: "Governor", value: `Redis token bucket · ${DOC_AI_RPM}/min` },
-                { label: "Edge", value: "MCP (Streamable HTTP) · REST /v1" },
-              ].map((item) => (
-                <div key={item.label} className="px-4 py-3">
-                  <dt className="gv-eyebrow">{item.label}</dt>
-                  <dd className="mt-1 text-[13.5px] leading-snug text-ink">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
+            <nav aria-label="Platform sections">
+              <ul className="gv-divide">
+                {GLANCE.map((item) => (
+                  <li key={item.label} style={hueStyle(item.hue)}>
+                    <a
+                      href={item.href}
+                      className="group flex items-center gap-3 px-4 py-3 no-underline transition-colors duration-150 ease-gv hover:bg-[var(--plate)]"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-7 w-1 shrink-0 rounded-full bg-[var(--plate-accent)]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="gv-eyebrow block transition-colors duration-150 ease-gv group-hover:text-[var(--plate-strong)]">
+                          {item.label}
+                        </span>
+                        <span className="mt-1 block text-[13.5px] leading-snug text-ink">
+                          {item.value}
+                        </span>
+                      </span>
+                      <Arrow className="shrink-0 text-ink-3" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
         }
       />
 
       {/* ------------------------------------------------------------------
           The shape of it: the numbers the platform is sized for, then the
-          three planes those numbers run through.
+          three planes those numbers run through. The figures stay in ink and
+          brand — a row of four measurements in four colours would imply the
+          measurements are four kinds of thing, and they are not.
          ------------------------------------------------------------------ */}
       <Band tone="white" size="lg" id="planes">
         <Cells columns={4} raised>
@@ -290,7 +412,7 @@ export default function PlatformPage() {
       {/* ------------------------------------------------------------------
           Why Temporal. A run drawn first, then the five reasons as a spine.
          ------------------------------------------------------------------ */}
-      <Band tone="soft" id="temporal">
+      <Band tone="soft" id="temporal" className="scroll-mt-16">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] lg:gap-12">
           <SectionHeading
             eyebrow="Why Temporal"
@@ -372,6 +494,9 @@ export default function PlatformPage() {
           <GovernorDiagram />
         </div>
 
+        {/* The amber on these four is the palette's own meaning — a thing that
+            needs attention and can change the answer — and not a decorative
+            choice. They are the only cards on the page that keep it. */}
         <div className="gv-panel mt-14 overflow-hidden">
           <header className="gv-toolbar">
             <div className="min-w-0">
@@ -408,7 +533,10 @@ export default function PlatformPage() {
       </Band>
 
       {/* ------------------------------------------------------------------
-          The AI layer: capabilities, never a vendor.
+          The AI layer: capabilities, never a vendor. This is the most
+          colourful block on the page, and legitimately so — six peers, six
+          names, six hues, and the whole argument of the section is that they
+          are six separate things behind one seam.
          ------------------------------------------------------------------ */}
       <Band tone="tint" id="ai-layer">
         <SectionHeading
@@ -422,8 +550,16 @@ export default function PlatformPage() {
           <ScrollX label="The adapter boundary">
             <ol className="flex min-w-[600px] items-stretch">
               {ADAPTER_CHAIN.map((node, index) => (
-                <li key={node.title} className="flex min-w-0 flex-1 items-center">
-                  <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface p-4 shadow-resting">
+                <li
+                  key={node.title}
+                  style={hueStyle(node.hue)}
+                  className="flex min-w-0 flex-1 items-center"
+                >
+                  <div className="min-w-0 flex-1 rounded-lg border border-[var(--plate-border)] bg-surface p-4 shadow-resting">
+                    <span
+                      aria-hidden="true"
+                      className="mb-2.5 block h-1 w-8 rounded-full bg-[var(--plate-accent)]"
+                    />
                     <p className="font-mono text-[12px] font-medium text-ink">{node.title}</p>
                     <p className="gv-micro mt-1.5">{node.sub}</p>
                   </div>
@@ -447,10 +583,14 @@ export default function PlatformPage() {
 
         <Cells columns={3} className="mt-8" as="ul">
           {AI_CAPABILITIES.map((capability, index) => (
-            <li key={capability.id} className="p-5">
+            <li
+              key={capability.id}
+              style={hueStyle(CAPABILITY_HUES[capability.id] ?? "slate")}
+              className="p-5"
+            >
               <div className="flex items-center gap-3">
                 <span
-                  className="gv-icon-plate gv-icon-plate-sm font-mono text-[11.5px] font-semibold"
+                  className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-border)] bg-[var(--plate)] font-mono text-[11.5px] font-semibold text-[var(--plate-strong)]"
                   data-numeric=""
                 >
                   {String(index + 1).padStart(2, "0")}
@@ -458,7 +598,7 @@ export default function PlatformPage() {
                 <h3 className="text-[15px] leading-tight text-ink">{capability.name}</h3>
               </div>
               <p className="gv-support mt-3">{capability.use}</p>
-              <p className="mt-3 border-l-2 border-brand-200 pl-3 text-[12.5px] leading-relaxed text-ink-3">
+              <p className="mt-3 border-l-2 border-[var(--plate-border)] pl-3 text-[12.5px] leading-relaxed text-ink-3">
                 {capability.note}
               </p>
             </li>
@@ -521,7 +661,7 @@ export default function PlatformPage() {
       {/* ------------------------------------------------------------------
           MCP at the edge.
          ------------------------------------------------------------------ */}
-      <Band tone="white" id="mcp">
+      <Band tone="white" id="mcp" className="scroll-mt-16">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] lg:gap-12">
           <div className="min-w-0">
             <SectionHeading
@@ -537,10 +677,13 @@ export default function PlatformPage() {
             />
             <ul className="gv-cells mt-7 sm:grid-cols-2">
               {MCP_POINTS.map((point) => (
-                <li key={point.title} className="p-5">
+                <li key={point.title} style={hueStyle(point.hue)} className="p-5">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-brand" aria-hidden="true">
-                      <Icon name={point.icon} size={16} />
+                    <span
+                      className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
+                      aria-hidden="true"
+                    >
+                      <Icon name={point.icon} size={15} />
                     </span>
                     <h3 className="text-[14px] font-semibold text-ink">{point.title}</h3>
                   </div>
@@ -561,7 +704,7 @@ export default function PlatformPage() {
       {/* ------------------------------------------------------------------
           Multi-tenancy.
          ------------------------------------------------------------------ */}
-      <Band tone="soft" id="tenancy">
+      <Band tone="soft" id="tenancy" className="scroll-mt-16">
         <SectionHeading
           eyebrow="Multi-tenancy"
           title="Isolation in the service layer and in the database"
@@ -570,14 +713,14 @@ export default function PlatformPage() {
         />
         <Cells columns={3} raised className="mt-9" as="ul">
           {TENANCY_LAYERS.map((layer, index) => (
-            <li key={layer.label} className="p-5 sm:p-6">
+            <li key={layer.label} style={hueStyle(layer.hue)} className="p-5 sm:p-6">
               <span
-                className="gv-icon-plate gv-icon-plate-sm gv-icon-plate-solid font-mono text-[12px] font-semibold"
+                className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-accent)] bg-[var(--plate-accent)] font-mono text-[12px] font-semibold text-white"
                 data-numeric=""
               >
                 {index + 1}
               </span>
-              <p className="gv-eyebrow mt-4">{layer.label}</p>
+              <p className="gv-eyebrow mt-4 text-[var(--plate-strong)]">{layer.label}</p>
               <p className="gv-support mt-2.5">{layer.body}</p>
             </li>
           ))}
@@ -601,7 +744,9 @@ export default function PlatformPage() {
       </Band>
 
       {/* ------------------------------------------------------------------
-          The audit chain.
+          The audit chain. Left in brand: three identical links of one chain
+          are the one place on this page where sameness is the message, and
+          colouring them apart would say they differ.
          ------------------------------------------------------------------ */}
       <Band tone="white" id="audit">
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-14">

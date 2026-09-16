@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { hueStyle } from "@/components/build/blocks";
 import { Icon, type IconName } from "@/components/icons/AgentIcon";
 import { Band, PageHeader } from "@/components/site/Page";
 import { Badge, Chip } from "@/components/ui/Badge";
@@ -12,9 +13,45 @@ export const metadata: Metadata = {
     "GravAI security controls and compliance mapping: RBI Digital Lending Directions, DPDP Act 2023, Account Aggregator, UIDAI Aadhaar masking, collections conduct and calling hours, payments and model risk governance.",
 };
 
-const SECURITY_CONTROLS = [
+/**
+ * HOW MUCH COLOUR A COMPLIANCE PAGE CAN CARRY.
+ *
+ * Less than the rest of the site, and for a reason that is not timidity: a
+ * security page that looks like a product launch reads as less trustworthy, not
+ * more, because the reader is here to check whether they are being sold
+ * something. So this page draws from the COOL ARC of the palette only — violet,
+ * indigo, blue, cyan, navy, pink, slate — and leaves the warm end alone.
+ *
+ * Green, amber and rose keep their reserved meanings and appear only where that
+ * meaning is the point: amber on the disclaimer at the top and on the one
+ * genuine capability gap, both of which are things a reader must not skim past,
+ * and the pass green on "Enforced in code", which is a control being in force
+ * rather than a decoration.
+ *
+ * Everywhere else the hue does exactly one job — it is an INDEX. Seven regimes
+ * and five control groups are two lists whose members are peers, and in a list
+ * of that length a colour is what lets someone find their way back to the panel
+ * they were reading. The same handful of hues therefore appears in both lists,
+ * which is deliberate: on this page a hue marks a position within its own list,
+ * and unlike an agent's hue it carries no identity beyond the band it sits in.
+ */
+
+/** The regime hues, keyed by the catalog's own id so a reorder cannot shift them. */
+const REGIME_HUES: Record<string, string> = {
+  "rbi-dl": "navy",
+  dpdp: "indigo",
+  aa: "blue",
+  uidai: "cyan",
+  collections: "violet",
+  payments: "pink",
+  "it-governance": "slate",
+};
+
+const SECURITY_CONTROLS: { group: string; hue: string; icon: IconName; items: string[] }[] = [
   {
     group: "Identity and access",
+    hue: "indigo",
+    icon: "shield",
     items: [
       "OIDC with MFA enforced at the identity provider; no local password store exists",
       "Eight roles from tenant_admin to auditor, each mapped to a fixed scope set",
@@ -24,6 +61,8 @@ const SECURITY_CONTROLS = [
   },
   {
     group: "Tenant isolation",
+    hue: "blue",
+    icon: "database",
     items: [
       "PostgreSQL row-level security policy on every table, plus a service-layer tenant guard",
       "A cross-tenant read reports as missing, never as forbidden — a 403 would confirm the record exists",
@@ -33,6 +72,8 @@ const SECURITY_CONTROLS = [
   },
   {
     group: "Data protection",
+    hue: "cyan",
+    icon: "file",
     items: [
       "Field-level encryption for PII with an envelope scheme: KEK in Key Vault, a data key per tenant",
       "Aadhaar masked to the last four digits at extraction; the full value is never stored, logged or emitted",
@@ -43,6 +84,8 @@ const SECURITY_CONTROLS = [
   },
   {
     group: "Agent-specific threats",
+    hue: "violet",
+    icon: "activity",
     items: [
       "Prompt injection via documents and tool results: data and instructions are separated, outputs are validated, tools are allowlisted per agent",
       "MCP confused deputy and token passthrough: tokens are audience-bound and never forwarded downstream",
@@ -53,6 +96,8 @@ const SECURITY_CONTROLS = [
   },
   {
     group: "Change and model governance",
+    hue: "slate",
+    icon: "sliders",
     items: [
       "Prompt versions are diffed, evaluated and promoted with approval; rollback is a documented runbook",
       "Scorecards are versioned with published feature weights and a calibration table; PSI computed monthly",
@@ -61,9 +106,6 @@ const SECURITY_CONTROLS = [
     ],
   },
 ];
-
-/** One icon per control group, in the order the groups are declared. */
-const GROUP_ICONS: IconName[] = ["shield", "database", "file", "activity", "sliders"];
 
 /** The four postures a lender asks about before anything else. */
 const POSTURE = [
@@ -157,7 +199,10 @@ export default function SecurityPage() {
       />
 
       {/* ------------------------------------------------------------------
-          The four postures a lender asks about first, as a status row.
+          The four postures a lender asks about first, as a status row. Left
+          in ink and the pass green: these four are claims about whether a
+          control holds, and the one colour on them is the colour that means
+          exactly that.
          ------------------------------------------------------------------ */}
       <Band tone="white" size="sm">
         <Cells columns={4} raised as="dl">
@@ -181,6 +226,10 @@ export default function SecurityPage() {
 
       {/* ------------------------------------------------------------------
           The compliance mapping. An index on the left, a panel per regime.
+          The index is also the colour key: the number beside a regime in the
+          sticky list is the same number, in the same colour, at the head of
+          its panel, which is what makes seven near-identical panels navigable
+          on the way back up.
          ------------------------------------------------------------------ */}
       <Band tone="soft" size="lg" id="compliance" className="scroll-mt-16">
         <SectionHeading
@@ -199,12 +248,15 @@ export default function SecurityPage() {
               </header>
               <ol className="gv-divide">
                 {COMPLIANCE_CONTROLS.map((regime, index) => (
-                  <li key={regime.id}>
+                  <li key={regime.id} style={hueStyle(REGIME_HUES[regime.id] ?? "slate")}>
                     <a
                       href={`#regime-${regime.id}`}
-                      className="flex items-baseline gap-3 px-4 py-2.5 text-[13px] leading-snug text-ink-2 no-underline transition-colors duration-150 ease-gv hover:bg-brand-50 hover:text-brand"
+                      className="flex items-baseline gap-3 px-4 py-2.5 text-[13px] leading-snug text-ink-2 no-underline transition-colors duration-150 ease-gv hover:bg-[var(--plate)] hover:text-[var(--plate-strong)]"
                     >
-                      <span className="font-mono text-[11px] text-ink-3" data-numeric="">
+                      <span
+                        className="font-mono text-[11px] text-[var(--plate-accent)]"
+                        data-numeric=""
+                      >
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <span className="min-w-0">{regime.regime}</span>
@@ -220,19 +272,20 @@ export default function SecurityPage() {
               <section
                 key={regime.id}
                 id={`regime-${regime.id}`}
-                className="gv-panel scroll-mt-24 overflow-hidden"
+                style={hueStyle(REGIME_HUES[regime.id] ?? "slate")}
+                className="gv-panel scroll-mt-24 overflow-hidden border-[var(--plate-border)]"
               >
-                <header className="gv-toolbar">
+                <header className="gv-toolbar bg-[var(--plate)]">
                   <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className="gv-icon-plate gv-icon-plate-sm font-mono text-[11.5px] font-semibold"
+                      className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-accent)] bg-[var(--plate-accent)] font-mono text-[11.5px] font-semibold text-white"
                       data-numeric=""
                     >
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <h3 className="text-[15.5px] leading-tight text-ink">{regime.regime}</h3>
                   </div>
-                  <Chip tone="brand">
+                  <Chip>
                     {regime.controls.length}{" "}
                     {regime.controls.length === 1 ? "control" : "controls"}
                   </Chip>
@@ -251,7 +304,10 @@ export default function SecurityPage() {
       </Band>
 
       {/* ------------------------------------------------------------------
-          The control register: one instrument, five rows.
+          The control register: one instrument, five rows. Each group's plate
+          carries its hue, which is what turns a tall undifferentiated panel
+          into five findable sections — the icon and the heading still say
+          which is which.
          ------------------------------------------------------------------ */}
       <Band tone="white" pattern="grid" size="lg" id="controls">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:gap-12">
@@ -275,14 +331,18 @@ export default function SecurityPage() {
             </span>
           </header>
           <div className="gv-divide">
-            {SECURITY_CONTROLS.map((group, index) => (
+            {SECURITY_CONTROLS.map((group) => (
               <div
                 key={group.group}
+                style={hueStyle(group.hue)}
                 className="grid gap-x-8 gap-y-4 p-5 sm:p-6 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]"
               >
                 <div className="min-w-0">
-                  <span className="gv-icon-plate" aria-hidden="true">
-                    <Icon name={GROUP_ICONS[index]} size={18} />
+                  <span
+                    className="gv-icon-plate border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
+                    aria-hidden="true"
+                  >
+                    <Icon name={group.icon} size={18} />
                   </span>
                   <h4 className="mt-3.5 text-[15.5px] leading-tight font-semibold text-ink">
                     {group.group}
@@ -306,6 +366,10 @@ export default function SecurityPage() {
 
       {/* ------------------------------------------------------------------
           The honest gap, and the conduct rules that are not a gap at all.
+          The gap keeps amber because amber is what it is — an unverified
+          dependency that can stop a deployment. The conduct panel beside it
+          takes the collections regime's own hue, so the detail and the
+          mapping it expands are visibly the same subject.
          ------------------------------------------------------------------ */}
       <Band tone="tint" size="lg" id="honest-gaps">
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
@@ -333,16 +397,24 @@ export default function SecurityPage() {
             </p>
           </div>
 
-          <div className="gv-panel min-w-0 overflow-hidden">
-            <header className="gv-toolbar">
+          <div
+            style={hueStyle(REGIME_HUES.collections ?? "slate")}
+            className="gv-panel min-w-0 overflow-hidden border-[var(--plate-border)]"
+          >
+            <header className="gv-toolbar bg-[var(--plate)]">
               <div className="min-w-0">
-                <p className="gv-eyebrow">Collections conduct, in detail</p>
+                <p className="gv-eyebrow text-[var(--plate-strong)]">
+                  Collections conduct, in detail
+                </p>
                 <h2 className="mt-1 text-[16px] leading-tight text-ink">
                   The rules the voice agent physically cannot break
                 </h2>
               </div>
               <span className="inline-flex items-center gap-2 text-[12px] font-medium text-ink-2">
-                <span className="gv-pip gv-pip-brand" aria-hidden="true" />
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 shrink-0 rounded-full bg-[var(--plate-accent)]"
+                />
                 In the workflow
               </span>
             </header>
@@ -357,11 +429,10 @@ export default function SecurityPage() {
                 >
                   <span
                     aria-hidden="true"
-                    className="absolute inset-y-0 border-x-2 border-brand"
+                    className="absolute inset-y-0 border-x-2 border-[var(--plate-accent)] bg-[var(--plate)]"
                     style={{
                       left: `${WINDOW_START_PCT}%`,
                       width: `${WINDOW_WIDTH_PCT}%`,
-                      background: "rgb(var(--gv-brand-rgb) / 0.10)",
                     }}
                   />
                 </div>
@@ -389,7 +460,10 @@ export default function SecurityPage() {
               <ul className="gv-divide mt-5">
                 {COLLECTIONS_RULES.map((rule) => (
                   <li key={rule} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                    <span className="mt-0.5 shrink-0 text-brand" aria-hidden="true">
+                    <span
+                      className="mt-0.5 shrink-0 text-[var(--plate-accent)]"
+                      aria-hidden="true"
+                    >
                       <Icon name="check" size={13} />
                     </span>
                     <span className="text-[13.5px] leading-relaxed text-ink-2">{rule}</span>

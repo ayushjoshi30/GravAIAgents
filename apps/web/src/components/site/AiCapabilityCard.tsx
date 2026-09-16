@@ -10,13 +10,23 @@
  * catalogue phrases them differently per agent ("Language model (rubric
  * scoring)", "Language model (fast tier)"), and an exact lookup would silently
  * fall through to a blank card the first time someone added a new wording.
+ *
+ * Each of the six categories is drawn in its own hue from the categorical
+ * palette, so a list of four capabilities reads as four different things spent
+ * rather than as four identical cards. The hue never says anything the card
+ * does not also print: the title names the capability and the last line names
+ * the unit it is billed in, both in words, and the colour only agrees with
+ * them.
  */
+
+import { hueStyle } from "@/components/build/blocks";
 
 type Category = "document" | "model" | "voice" | "stt" | "tts" | "translate";
 
 type Meta = {
   category: Category;
   billing: string;
+  hue: string;
   icon: React.ReactNode;
 };
 
@@ -77,6 +87,30 @@ const BILLING: Record<Category, string> = {
 };
 
 /**
+ * A hue per category, from the twelve-family palette.
+ *
+ * `model` IS TEAL ON PURPOSE, AND NOTHING ELSE HERE IS. Across this product
+ * teal means a language model is reasoning and navy means deterministic code
+ * reached a fixed answer — the distinction the whole platform is built to make
+ * auditable. The `model` card is a language model, so teal here is the claim
+ * being restated rather than decoration borrowing it.
+ *
+ * The speech and translation capabilities are models too, but they are not a
+ * language model reasoning about a case, so they take ordinary categorical
+ * hues and leave teal meaning exactly one thing. None of the six is green,
+ * amber or rose: spending a capability is not an outcome, and those three are
+ * how this site says a run passed, carried risk or stopped.
+ */
+const HUE: Record<Category, string> = {
+  document: "indigo",
+  model: "teal",
+  voice: "orange",
+  stt: "pink",
+  tts: "violet",
+  translate: "cyan",
+};
+
+/**
  * Order matters. The combined voice capability mentions both "speech to text"
  * and "text to speech", so it has to be tested before either of them.
  */
@@ -92,7 +126,7 @@ function classify(capability: string): Category {
 
 function meta(capability: string): Meta {
   const category = classify(capability);
-  return { category, billing: BILLING[category], icon: ICONS[category] };
+  return { category, billing: BILLING[category], hue: HUE[category], icon: ICONS[category] };
 }
 
 /**
@@ -106,14 +140,19 @@ function split(capability: string): { title: string; qualifier: string | null } 
 }
 
 export function AiCapabilityCard({ capability }: { capability: string }) {
-  const { icon, billing } = meta(capability);
+  const { icon, billing, hue } = meta(capability);
   const { title, qualifier } = split(capability);
 
   return (
-    <li className="gv-card flex gap-3 p-4">
+    /* The category is decided at runtime from the capability's wording, so the
+       hue cannot be a class name: Tailwind reads the source for complete class
+       names at build time and would emit nothing for one assembled here. The
+       class names stay constant and `hueStyle` varies the values underneath
+       them — the same helper the studio's nodes use. */
+    <li className="gv-card flex gap-3 border-[var(--plate-border)] p-4" style={hueStyle(hue)}>
       <span
         aria-hidden="true"
-        className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-brand-border bg-brand-50 text-brand"
+        className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
       >
         <svg width="20" height="20" viewBox="0 0 20 20" focusable="false">
           {icon}
@@ -128,6 +167,10 @@ export function AiCapabilityCard({ capability }: { capability: string }) {
             {qualifier}
           </span>
         ) : null}
+        {/* The billing line keeps its muted ink. It is the one fact on the card
+            that is the same kind of fact whatever the capability is, and
+            colouring it per category would imply a difference that is not
+            there. */}
         <span className="mt-1.5 block font-mono text-[11px] uppercase tracking-wide text-ink-3">
           {billing}
         </span>

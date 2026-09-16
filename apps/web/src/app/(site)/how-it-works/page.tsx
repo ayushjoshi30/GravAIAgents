@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { hueStyle } from "@/components/build/blocks";
 import { AgentIcon, Icon } from "@/components/icons/AgentIcon";
 import { Band, PageHeader } from "@/components/site/Page";
 import { Badge, Chip, TierBadge } from "@/components/ui/Badge";
@@ -7,12 +8,68 @@ import { Arrow, ButtonLink } from "@/components/ui/Button";
 import { Card, Cells, ScrollX, SectionHeading } from "@/components/ui/Surface";
 import { AGENTS_BY_ID } from "@/lib/agents";
 import { JOURNEY } from "@/lib/platform";
+import { NODE_BY_TYPE } from "@/lib/nodeCatalog";
 
 export const metadata: Metadata = {
   title: "How it works",
   description:
     "The Graviton lending journey — onboarding, DigiLocker KYC, credit, BRE, underwriting, deviations, Task Center, LAN — with the GravAI agents overlaid at each stage.",
 };
+
+/**
+ * A hue per stage, keyed by the stage's own id.
+ *
+ * WHY THIS IS NOT DECORATION. The eight stages are a sequence, and a sequence
+ * is the one thing a reader loses first on a long page: at stage six, nobody
+ * remembers whether they are near the beginning or near the end. Running a
+ * progression across them puts that information in the periphery, where it
+ * costs nothing to read. The strip at the top of the page is the key, every
+ * panel below repeats its stage's colour, and the number and the words "Stage n
+ * of eight" are printed beside it throughout — so the colour is a second
+ * channel for something already stated, never the only one.
+ *
+ * WHY THESE EIGHT. The arc runs cool to warm, which is the journey's own shape:
+ * origination is analytic (violet through cyan), the underwriter's screen is
+ * navy because that is where deterministic arithmetic and a versioned scorecard
+ * are what a person is reading, deviations are slate because a deviation is
+ * deliberately an exception rather than a step, and servicing after disbursal
+ * warms up into pink and orange.
+ *
+ * WHAT IS WITHHELD, AND WHY. Green, amber and rose are absent: they are the
+ * platform's outcome colours — proceeded, at risk, stopped — and a lending
+ * journey painted in them would tell a reader that stage five is a warning.
+ * Teal is absent for a narrower reason: teal means a language model reasoned,
+ * everywhere it appears on this site, and this page is precisely where a reader
+ * is learning which parts of the journey a model touches. Spending teal on a
+ * stage number would be the one place that confusion is most expensive.
+ *
+ * Keyed by id rather than by position so that reordering `JOURNEY` moves a
+ * stage's colour with it instead of silently handing it to its neighbour.
+ */
+const STAGE_HUES: Record<string, string> = {
+  onboarding: "violet",
+  kyc: "indigo",
+  credit: "blue",
+  bre: "cyan",
+  underwriting: "navy",
+  deviations: "slate",
+  tasks: "pink",
+  lan: "orange",
+};
+
+/**
+ * An agent's own hue, from the generated node registry.
+ *
+ * Note that this is a DIFFERENT system from the stage hue above, and the page
+ * deliberately shows both at once: inside a stage panel painted in the stage's
+ * colour, each attached agent still wears its own. That is the honest picture —
+ * an agent is not owned by the stage it happens to be attached to, and the same
+ * agent appears at more than one stage — and it is also what keeps this page
+ * agreeing with the catalog, the agent pages and the studio canvas.
+ */
+function agentHue(id: string): string {
+  return NODE_BY_TYPE[`agent.${id}`]?.hue ?? "slate";
+}
 
 /** The three points in the journey where a person, not an agent, decides. */
 const HUMAN_GATES = [
@@ -110,13 +167,15 @@ export default function HowItWorksPage() {
       {/* ------------------------------------------------------------------
           The journey. A pipeline strip first, so the eight stages are one
           object before they are eight panels; then a stage per panel, joined
-          by a spine so the sequence reads as a sequence.
+          by a spine so the sequence reads as a sequence. The strip is also
+          the key to the progression: every colour on this page is introduced
+          there, with its stage number and its name beside it.
          ------------------------------------------------------------------ */}
       <Band tone="soft" pattern="dots" size="lg" id="journey" className="scroll-mt-16">
         <SectionHeading
           eyebrow="The journey"
           title="Eight stages, fourteen agents"
-          lede="Read down the left for what Graviton does. Read across for which agents attach, and what they contribute."
+          lede="Read down the left for what Graviton does. Read across for which agents attach, and what they contribute. The colour travels with you: cool at origination, navy at the decision, warm once the loan is live."
           size="lg"
         />
 
@@ -124,11 +183,15 @@ export default function HowItWorksPage() {
           <ScrollX label="Journey stages" className="pb-1">
             <ol className="flex min-w-[760px] items-stretch">
               {JOURNEY.map((stage, index) => (
-                <li key={stage.id} className="relative min-w-0 flex-1">
+                <li
+                  key={stage.id}
+                  style={hueStyle(STAGE_HUES[stage.id] ?? "slate")}
+                  className="relative min-w-0 flex-1"
+                >
                   {index < JOURNEY.length - 1 ? (
                     <span
                       aria-hidden="true"
-                      className="absolute top-[13px] left-1/2 h-px w-full bg-brand-200"
+                      className="absolute top-[13px] left-1/2 h-px w-full bg-[var(--plate-accent)] opacity-40"
                     />
                   ) : null}
                   <a
@@ -136,12 +199,12 @@ export default function HowItWorksPage() {
                     className="group relative block px-2 text-center no-underline"
                   >
                     <span
-                      className="relative z-10 mx-auto flex h-[27px] w-[27px] items-center justify-center rounded-full border border-brand-200 bg-surface font-mono text-[11px] font-medium text-brand shadow-resting transition-colors duration-150 ease-gv group-hover:border-brand group-hover:bg-brand group-hover:text-white"
+                      className="relative z-10 mx-auto flex h-[27px] w-[27px] items-center justify-center rounded-full border border-[var(--plate-border)] bg-[var(--plate)] font-mono text-[11px] font-medium text-[var(--plate-strong)] shadow-resting transition-colors duration-150 ease-gv group-hover:border-[var(--plate-accent)] group-hover:bg-[var(--plate-accent)] group-hover:text-white"
                       data-numeric=""
                     >
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span className="mt-3 block text-[12.5px] leading-snug font-medium text-ink transition-colors duration-150 ease-gv group-hover:text-brand">
+                    <span className="mt-3 block text-[12.5px] leading-snug font-medium text-ink transition-colors duration-150 ease-gv group-hover:text-[var(--plate-strong)]">
                       {stage.step}
                     </span>
                     <span className="gv-micro mt-1 block">
@@ -159,33 +222,39 @@ export default function HowItWorksPage() {
             const attached = stage.agents
               .map((agentId) => AGENTS_BY_ID[agentId])
               .filter((agent) => Boolean(agent));
+            const stagePlate = hueStyle(STAGE_HUES[stage.id] ?? "slate");
 
             return (
-              <li key={stage.id} id={`stage-${stage.id}`} className="scroll-mt-24">
+              <li
+                key={stage.id}
+                id={`stage-${stage.id}`}
+                style={stagePlate}
+                className="scroll-mt-24"
+              >
                 {index > 0 ? (
                   <span
                     aria-hidden="true"
-                    className="ml-7 block h-9 w-px bg-brand-200 sm:ml-8"
+                    className="ml-7 block h-9 w-px bg-[var(--plate-accent)] opacity-40 sm:ml-8"
                   />
                 ) : null}
 
-                <article className="gv-panel overflow-hidden">
-                  <header className="gv-toolbar">
+                <article className="gv-panel overflow-hidden border-[var(--plate-border)]">
+                  <header className="gv-toolbar bg-[var(--plate)]">
                     <div className="flex min-w-0 items-center gap-3">
                       <span
-                        className="gv-icon-plate gv-icon-plate-sm font-mono text-[12px] font-semibold"
+                        className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-accent)] bg-[var(--plate-accent)] font-mono text-[12px] font-semibold text-white"
                         data-numeric=""
                       >
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <div className="min-w-0">
-                        <p className="gv-eyebrow">
+                        <p className="gv-eyebrow text-[var(--plate-strong)]">
                           Stage {index + 1} of {JOURNEY.length}
                         </p>
                         <h3 className="text-[17px] leading-tight text-ink">{stage.step}</h3>
                       </div>
                     </div>
-                    <Chip tone="brand">
+                    <Chip>
                       {stage.agents.length} {stage.agents.length === 1 ? "agent" : "agents"}{" "}
                       attached
                     </Chip>
@@ -205,16 +274,25 @@ export default function HowItWorksPage() {
                       <p className="gv-support mt-4">{stage.detail}</p>
                     </div>
 
+                    {/* Each attached agent keeps its OWN colour inside a panel
+                        painted in the stage's. An agent belongs to itself, not
+                        to the stage it is attached at — several of these appear
+                        at more than one stage — and overriding its hue here
+                        would make this the one page on the site where an agent
+                        changes colour depending on where you found it. */}
                     <div className="min-w-0">
                       <p className="gv-eyebrow mb-3">What GravAI attaches</p>
                       <ul className="gv-cells">
                         {attached.map((agent) => (
-                          <li key={agent.id}>
+                          <li key={agent.id} style={hueStyle(agentHue(agent.id))}>
                             <Link
                               href={`/agents/${agent.id}`}
-                              className="gv-link-arrow flex w-full items-center gap-3 p-3.5 no-underline transition-colors duration-150 ease-gv hover:bg-brand-50"
+                              className="gv-link-arrow flex w-full items-center gap-3 p-3.5 no-underline transition-colors duration-150 ease-gv hover:bg-[var(--plate)]"
                             >
-                              <span className="gv-icon-plate gv-icon-plate-sm" aria-hidden="true">
+                              <span
+                                aria-hidden="true"
+                                className="gv-icon-plate gv-icon-plate-sm border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
+                              >
                                 <AgentIcon id={agent.id} size={16} />
                               </span>
                               <span className="min-w-0 flex-1">
@@ -243,7 +321,10 @@ export default function HowItWorksPage() {
       </Band>
 
       {/* ------------------------------------------------------------------
-          The three human gates. One elevated statement, three cells.
+          The three human gates. One elevated statement, three cells. These
+          stay brand rather than joining the progression: a gate is not a
+          ninth stage, it is the thing that stops the other eight, and giving
+          it a colour from the same ramp would file it as one of them.
          ------------------------------------------------------------------ */}
       <Band tone="white" id="human-gates">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] lg:gap-14">
@@ -297,7 +378,10 @@ export default function HowItWorksPage() {
       </Band>
 
       {/* ------------------------------------------------------------------
-          The memorandum. Drawn as the document it is, not as four cards.
+          The memorandum. Drawn as the document it is, not as four cards, and
+          left in the document's own greys: this is the artefact a person
+          reads and signs, and a memorandum that arrives in five colours looks
+          like a brochure rather than a credit file.
          ------------------------------------------------------------------ */}
       <Band tone="tint" id="evidence">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] lg:gap-14">

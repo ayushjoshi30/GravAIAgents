@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { hueStyle } from "@/components/build/blocks";
 import { AgentIcon, Icon } from "@/components/icons/AgentIcon";
 import { Badge } from "@/components/ui/Badge";
+import { NODE_BY_TYPE } from "@/lib/nodeCatalog";
 
 /**
  * The hero's product visual: one agent run, drawn as a control plane.
@@ -21,6 +23,21 @@ import { Badge } from "@/components/ui/Badge";
  * 150-300ms transition, and a panel that animated by itself would be claiming
  * to be a live feed.
  *
+ * COLOUR, AND THE THREE THINGS IT IS ALLOWED TO MEAN HERE.
+ *
+ *   1. An agent's own hue, taken from the generated node catalog — teal for
+ *      Document Intelligence, amber for Risk, indigo for Credit Appraisal.
+ *      It is never chosen in this file, so the agent that is teal here is the
+ *      same agent that is teal on the catalog page, in the agents menu and on
+ *      the studio canvas.
+ *   2. An outcome: green proceeded, amber is risk or a rule that can reject,
+ *      red stopped. That is the risk band scale and the status pills, and
+ *      nothing else on this panel may borrow those three.
+ *   3. The model / code channel, drawn by `ChannelMark`: teal where a language
+ *      model did the reasoning, navy where deterministic code reached a fixed
+ *      answer. This is the platform's central claim, so it is printed as a
+ *      word and the hue only reinforces it.
+ *
  * Drawing rules: every glyph is inline SVG on a 24x24 grid with 1.4-unit
  * square-capped strokes, matching `AgentIcon`. No raster asset, no chart
  * library — the band scale and the connectors are CSS and markup.
@@ -36,6 +53,15 @@ const AMBER_MAX = 15;
 const PROBABILITY = 6.58;
 
 const axis = (value: number) => `${((value / SCALE_MAX) * 100).toFixed(1)}%`;
+
+/**
+ * An agent's hue, read from the catalog `scripts/gen_node_catalog.py`
+ * generates. An id the catalog does not know falls back to the neutral slate
+ * rather than to a colour invented here.
+ */
+function agentHue(id: string): string {
+  return NODE_BY_TYPE[`agent.${id}`]?.hue ?? "slate";
+}
 
 type PillTone = "brand" | "pass" | "amber";
 
@@ -67,7 +93,57 @@ function StatusPill({
   );
 }
 
-/** The agent name, its plate and its status, as one row. */
+/**
+ * Which half of the platform did this piece of work: a language model, or
+ * code with a fixed answer.
+ *
+ * Teal against navy is the distinction the whole product is built on, so it
+ * is spelled out on the busiest surface on the site rather than left for a
+ * reader to infer from a shade. The label is the signal and the hue is the
+ * second channel, which is also what makes it readable without colour.
+ */
+type Channel = "model" | "code";
+
+/**
+ * Each mark is filled with its family's `-border` step rather than its `-soft`
+ * one, because a soft plate is the ground these marks land on and a chip
+ * cannot be a chip against its own colour. The teal mark sits on the document
+ * agent's teal well, where `-soft` was the identical value and the mark had no
+ * edge at all; the navy one sits on `.gv-figure`, whose tint and `brand-50`
+ * differ by about one per cent. The `-border` step separates from both, and
+ * `-strong` on it still clears 4.5:1 at this size — 5.9:1 for teal, 9.2:1 for
+ * navy. The risk band above uses the same step as a fill for the same reason.
+ */
+const CHANNEL: Record<Channel, { label: string; className: string }> = {
+  model: {
+    label: "Language model",
+    className:
+      "border-[var(--gv-hue-teal-border)] bg-[var(--gv-hue-teal-border)] text-[var(--gv-hue-teal-strong)]",
+  },
+  code: {
+    label: "Deterministic code",
+    className: "border-brand-200 bg-brand-200 text-brand-700",
+  },
+};
+
+function ChannelMark({ channel }: { channel: Channel }) {
+  const look = CHANNEL[channel];
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded border px-1.5 py-[3px] font-mono text-[10px] font-semibold tracking-[0.04em] whitespace-nowrap ${look.className}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-[1px] bg-current" aria-hidden="true" />
+      {look.label}
+    </span>
+  );
+}
+
+/**
+ * The agent name, its plate and its status, as one row.
+ *
+ * The plate is the agent's catalog hue rather than a house colour, which is
+ * what lets a reader recognise the same agent three screens later.
+ */
 function AgentHead({
   id,
   name,
@@ -82,8 +158,11 @@ function AgentHead({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="gv-icon-plate gv-icon-plate-solid gv-icon-plate-sm">
-          <AgentIcon id={id} size={16} />
+        <span
+          style={hueStyle(agentHue(id))}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
+        >
+          <AgentIcon id={id} size={17} />
         </span>
         <div className="min-w-0">
           <p className="truncate text-[13.5px] font-semibold text-ink">{name}</p>
@@ -104,12 +183,18 @@ const STEPS: Step[] = [
   { label: "Unclassified after routing", value: "0.0%", done: true },
 ];
 
-/** The tick on a finished step, or the pip on the one still running. */
+/**
+ * The tick on a finished step, or the pip on the one still running. The check
+ * glyph is what says "finished"; the plate is the agent's hue, so the four
+ * steps read as belonging to the agent above them.
+ */
 function StepMark({ done }: { done: boolean }) {
   return (
     <span
       className={`relative z-10 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border bg-surface ${
-        done ? "border-brand-200 text-brand" : "border-brand-300"
+        done
+          ? "border-[var(--plate-border)] text-[var(--plate-accent)]"
+          : "border-[var(--plate-accent)]"
       }`}
       aria-hidden="true"
     >
@@ -171,15 +256,20 @@ export function HomeHeroPanel({ className }: { className?: string }) {
             }
           />
 
-          {/* The step list, on a sunken plane, with a connection line down the
-              ticks so the four steps read as one sequence. */}
-          <div className="gv-well mt-3.5 p-3.5">
-            <p className="gv-eyebrow">Document intelligence</p>
+          {/* The step list, on a sunken plane in the agent's own hue, with a
+              connection line down the ticks so the four steps read as one
+              sequence rather than as four unrelated rows. */}
+          <div
+            style={hueStyle(agentHue("doc_intelligence"))}
+            className="gv-well mt-3.5 border-[var(--plate-border)] bg-[var(--plate)] p-3.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <p className="gv-eyebrow text-[var(--plate-strong)]">Document intelligence</p>
+              <ChannelMark channel="model" />
+            </div>
             <div className="relative mt-2.5">
-              {/* The connection line down the ticks: one sequence, not four
-                  unrelated rows. */}
               <span
-                className="absolute top-3 bottom-3 left-[8.5px] w-px bg-line-strong"
+                className="absolute top-3 bottom-3 left-[8.5px] w-px bg-[var(--plate-border)]"
                 aria-hidden="true"
               />
               <ol>
@@ -199,7 +289,10 @@ export function HomeHeroPanel({ className }: { className?: string }) {
                 ))}
               </ol>
             </div>
-            <p className="gv-micro mt-2.5">
+            {/* Not `.gv-micro`: its ink-3 is tuned for white and lands at
+                4.3:1 on a tinted plate. The same sentence one step darker
+                clears 4.5:1 on every hue in the set. */}
+            <p className="mt-2.5 text-[12.5px] leading-[1.5] text-ink-2">
               6 routed to extract, 2 to digitise. Nothing failed classification.
             </p>
           </div>
@@ -218,12 +311,18 @@ export function HomeHeroPanel({ className }: { className?: string }) {
           />
 
           {/* The risk readout: the figure, the band, and where the figure sits
-              between the two published band edges. */}
+              between the two published band edges. Every colour in this block
+              is semantic — green proceeded, amber is the band that refers, red
+              stopped — which is exactly why no decorative hue is allowed
+              anywhere near it. */}
           <div className="gv-figure mt-3.5 p-4">
             <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
               <div className="min-w-0">
-                <p className="gv-label text-ink-3">P(30+ DPD in 6 months)</p>
-                <p className="gv-metric-sm mt-1 text-ink" data-numeric="">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="gv-label text-ink-3">P(30+ DPD in 6 months)</span>
+                  <ChannelMark channel="code" />
+                </p>
+                <p className="gv-metric-sm mt-1.5 text-ink" data-numeric="">
                   {PROBABILITY}%
                 </p>
               </div>
@@ -254,7 +353,15 @@ export function HomeHeroPanel({ className }: { className?: string }) {
         {/* The same run's credit figures, as the panel's footer strip. */}
         <div className="border-t border-line bg-surface-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:px-5">
-            <p className="gv-micro">Credit Appraisal Agent · same run</p>
+            <p className="flex min-w-0 items-center gap-2">
+              <span
+                style={hueStyle(agentHue("credit_appraisal"))}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]"
+              >
+                <AgentIcon id="credit_appraisal" size={13} />
+              </span>
+              <span className="gv-micro truncate">Credit Appraisal Agent · same run</span>
+            </p>
             <Badge tone="amber" dot>
               Refer to an underwriter
             </Badge>

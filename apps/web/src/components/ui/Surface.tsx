@@ -1,12 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowCorner } from "@/components/ui/Button";
+import { hueStyle } from "@/components/build/blocks";
 
 /**
  * Containers.
  *
  * There are four planes in this product — the page ground, a raised panel, an
- * elevated card and a sunken well — and five card roles on top of them:
+ * elevated card and a sunken well — and six card roles on top of them:
  *
  *   default      a white card on the page. The workhorse.
  *   elevated     the one card in a section that carries the argument.
@@ -15,10 +16,32 @@ import { ArrowCorner } from "@/components/ui/Button";
  *   interactive  the whole surface is a link: lifts 3px, border goes brand,
  *                any `gv-card-arrow` inside travels.
  *   feature      a visual and its text, on a brand-tinted ground.
+ *   tinted       the same card cut into a hue's soft plate.
  *
  * The visual definition of each lives in globals.css (`.gv-card`,
  * `.gv-card-elevated`, …) so a plain `<div className="gv-card gv-card-metric">`
  * anywhere in the app looks identical to one built from this file.
+ *
+ * COLOUR REACHES THESE CONTAINERS THROUGH ONE PROP. `Card`, `LinkCard`,
+ * `Panel`, `Figure` and `Cells` each take an optional `hue` naming a family in
+ * the twelve-hue categorical palette — violet, indigo, blue, cyan, teal, navy,
+ * pink, orange, slate. Setting it publishes that hue's four steps as custom
+ * properties on the element, which the container's own classes read and which
+ * anything nested inside can read too: a `Badge tone="hue"` in a hued card
+ * comes out the card's colour without being told it twice.
+ *
+ * WHY A PROPERTY AND NOT A CLASS NAME. Tailwind builds its stylesheet by
+ * scanning the source for complete class names, so `bg-${hue}-soft` yields no
+ * style at all — the string is assembled in the browser, long after that
+ * stylesheet was written, and the failure is silent. `hueStyle` is the one
+ * helper that turns a hue into properties, imported here rather than
+ * reimplemented so the marketing site and the studio canvas resolve a hue by
+ * the same route.
+ *
+ * NEVER GREEN, AMBER OR ROSE. Those three mean a run proceeded, a rule flagged
+ * risk and a run stopped. A container that borrows one as decoration makes
+ * every genuine outcome elsewhere on the site harder to read, and this is a
+ * product people use to decide credit.
  */
 
 export type CardVariant =
@@ -27,7 +50,8 @@ export type CardVariant =
   | "secondary"
   | "metric"
   | "interactive"
-  | "feature";
+  | "feature"
+  | "tinted";
 
 const CARD_VARIANT: Record<CardVariant, string> = {
   default: "",
@@ -36,7 +60,30 @@ const CARD_VARIANT: Record<CardVariant, string> = {
   metric: "gv-card-metric",
   interactive: "gv-card-interactive",
   feature: "gv-card-feature",
+  /** The plate itself is chosen by `tintedPlate` below, not written here. */
+  tinted: "",
 };
+
+/**
+ * The plate a `tinted` container is cut into.
+ *
+ * WHY THIS IS TWO CLASS STRINGS AND NOT ONE WITH A var() FALLBACK. Writing it
+ * as `bg-[var(--plate,var(--gv-layer-tint))]` looks like it degrades to the
+ * brand wash when no hue was given, but a custom property inherits, and
+ * `var()` reaches its fallback only when the property is set nowhere up the
+ * tree. Inside a `Band` or `Section` that has been given a hue, every
+ * descendant already has `--plate` — and there it is the band's own ground, so
+ * an untinted-by-choice card would take the exact colour it is sitting on and
+ * vanish into it. The fallback that exists to keep the variant usable with no
+ * hue is precisely the one case that would never run. So the two spellings are
+ * kept apart and the component picks between them on the prop it was actually
+ * handed, which is a decision made where the answer is known.
+ */
+function tintedPlate(hue: string | undefined): string {
+  return hue
+    ? "border-[var(--plate-border)] bg-[var(--plate)]"
+    : "border-[var(--gv-line-tint)] bg-[var(--gv-layer-tint)]";
+}
 
 export function Eyebrow({
   children,
@@ -58,14 +105,28 @@ export function Card({
   className,
   as: Tag = "div",
   variant = "default",
+  hue,
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "section" | "article" | "li";
   variant?: CardVariant;
+  /** A categorical hue name. See the note at the top of this file. */
+  hue?: string;
 }) {
+  /* `tinted` already draws its own edge from the plate, so the hue edge is
+     added only for the variants that do not. Two border-colour utilities on
+     one element would otherwise leave the winner to the order Tailwind
+     happened to emit them in, which is not a thing to leave to chance. */
+  const hueEdge = hue && variant !== "tinted" ? "border-[var(--plate-border)]" : "";
+  const plate = variant === "tinted" ? tintedPlate(hue) : "";
   return (
-    <Tag className={`gv-card min-w-0 ${CARD_VARIANT[variant]} ${className ?? ""}`}>{children}</Tag>
+    <Tag
+      style={hue ? hueStyle(hue) : undefined}
+      className={`gv-card min-w-0 ${CARD_VARIANT[variant]} ${plate} ${hueEdge} ${className ?? ""}`}
+    >
+      {children}
+    </Tag>
   );
 }
 
@@ -82,6 +143,7 @@ export function LinkCard({
   footer,
   icon,
   className,
+  hue,
   external = false,
 }: {
   href: string;
@@ -91,38 +153,86 @@ export function LinkCard({
   footer?: ReactNode;
   icon?: ReactNode;
   className?: string;
+  /**
+   * A categorical hue name. It colours the card's edge, its icon plate and its
+   * eyebrow, and takes the edge to the hue's accent on hover and focus — which
+   * is what lets a row of link cards read as a row of different destinations
+   * rather than as four identical white boxes.
+   */
+  hue?: string;
   external?: boolean;
 }) {
   const inner = (
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          {icon ? <span className="gv-icon-plate mb-3.5">{icon}</span> : null}
-          {eyebrow ? <p className="gv-eyebrow mb-1.5">{eyebrow}</p> : null}
+          {icon ? (
+            <span
+              className={`gv-icon-plate mb-3.5 ${hue ? "border-[var(--plate-border)] bg-[var(--plate)] text-[var(--plate-accent)]" : ""}`}
+            >
+              {icon}
+            </span>
+          ) : null}
+          {/* The eyebrow sits on the card's white ground rather than on the
+              plate, so it takes the hue's base step — the value the palette
+              tunes to be read on white. */}
+          {eyebrow ? (
+            <p className={`gv-eyebrow mb-1.5 ${hue ? "text-[var(--plate-accent)]" : ""}`}>
+              {eyebrow}
+            </p>
+          ) : null}
           <h3 className="text-[16px] text-ink">{title}</h3>
         </div>
-        <ArrowCorner className="gv-card-arrow mt-0.5 shrink-0" />
+        {/* The arrow is coloured by `.gv-card-interactive:hover .gv-card-arrow`
+            in globals.css, which hands it the brand navy. On a card wearing
+            some other hue that leaves the one moving part of the hover state
+            disagreeing with the border and the icon plate beside it, so a hued
+            card takes the accent off the same plate they read. The trailing `!`
+            is what keeps a single class decisive against a three-class
+            descendant selector, and `group` is added only on the hued path so a
+            card with no hue renders exactly the markup it rendered before. */}
+        <ArrowCorner
+          className={`gv-card-arrow mt-0.5 shrink-0 ${
+            hue
+              ? "group-hover:text-[var(--plate-accent)]! group-focus-within:text-[var(--plate-accent)]!"
+              : ""
+          }`}
+        />
       </div>
       {children ? <div className="gv-support mt-2.5">{children}</div> : null}
       {footer ? <div className="gv-micro mt-4">{footer}</div> : null}
     </>
   );
 
-  const classes = `gv-card gv-card-interactive block min-w-0 p-5 no-underline ${className ?? ""}`;
+  /* The hover edge is spelled out rather than left to `.gv-card-interactive`,
+     whose brand border would contradict the hue the card is already wearing. */
+  const hueEdge = hue
+    ? "group border-[var(--plate-border)] hover:border-[var(--plate-accent)] focus-within:border-[var(--plate-accent)]"
+    : "";
+  const classes = `gv-card gv-card-interactive block min-w-0 p-5 no-underline ${hueEdge} ${className ?? ""}`;
+  const style = hue ? hueStyle(hue) : undefined;
 
   if (external) {
     return (
-      <a href={href} className={classes} target="_blank" rel="noreferrer noopener">
+      <a href={href} style={style} className={classes} target="_blank" rel="noreferrer noopener">
         {inner}
       </a>
     );
   }
   return (
-    <Link href={href} className={classes}>
+    <Link href={href} style={style} className={classes}>
       {inner}
     </Link>
   );
 }
+
+const PANEL_TONE = {
+  default: "gv-card",
+  /** The 14px radius and the raised shadow, for a panel that holds cards. */
+  raised: "gv-panel",
+  /** A panel cut into a hue's soft plate. The plate comes from `tintedPlate`. */
+  tinted: "gv-card",
+} as const;
 
 export function Panel({
   title,
@@ -132,6 +242,7 @@ export function Panel({
   className,
   bodyClassName,
   tone = "default",
+  hue,
 }: {
   title?: ReactNode;
   description?: ReactNode;
@@ -140,12 +251,16 @@ export function Panel({
   className?: string;
   bodyClassName?: string;
   /** `raised` gives the panel the 14px radius and the raised shadow, for a
-   *  panel that holds other cards rather than holding content directly. */
-  tone?: "default" | "raised";
+   *  panel that holds other cards rather than holding content directly;
+   *  `tinted` puts it on the hue's soft plate instead of white. */
+  tone?: keyof typeof PANEL_TONE;
+  /** A categorical hue name. See the note at the top of this file. */
+  hue?: string;
 }) {
   return (
     <section
-      className={`${tone === "raised" ? "gv-panel" : "gv-card"} min-w-0 overflow-hidden ${className ?? ""}`}
+      style={hue ? hueStyle(hue) : undefined}
+      className={`${PANEL_TONE[tone]} min-w-0 overflow-hidden ${tone === "tinted" ? tintedPlate(hue) : hue ? "border-[var(--plate-border)]" : ""} ${className ?? ""}`}
     >
       {(title || actions) && (
         <header className="gv-toolbar items-start">
@@ -191,16 +306,32 @@ export function Figure({
   children,
   caption,
   className,
+  hue,
   scroll = false,
 }: {
   children: ReactNode;
   caption?: ReactNode;
   className?: string;
+  /**
+   * A categorical hue name, which moves the frame onto that hue's plate. Worth
+   * setting whenever the drawing inside is itself hued, so the line work is not
+   * one colour sitting on a wash of another.
+   *
+   * It has no business inside a diagram that distinguishes a language model
+   * from deterministic code: teal and navy are a claim about how an answer was
+   * reached, and a decorative frame in a third colour makes that reading
+   * harder. Frame those in the hue they already argue in, or leave them alone.
+   */
+  hue?: string;
   scroll?: boolean;
 }) {
   return (
-    <figure className={`min-w-0 ${className ?? ""}`}>
-      <div className={`gv-figure ${scroll ? "gv-scroll-x" : ""} p-4 sm:p-5`}>{children}</div>
+    <figure style={hue ? hueStyle(hue) : undefined} className={`min-w-0 ${className ?? ""}`}>
+      <div
+        className={`gv-figure ${hue ? "border-[var(--plate-border)] bg-[var(--plate)]" : ""} ${scroll ? "gv-scroll-x" : ""} p-4 sm:p-5`}
+      >
+        {children}
+      </div>
       {caption ? <figcaption className="gv-micro mt-2.5">{caption}</figcaption> : null}
     </figure>
   );
@@ -214,21 +345,42 @@ export function Figure({
  * Pass the column counts through `columns`; do NOT add a `gap-*` utility, the
  * 1px gap is the rule itself.
  */
+const CELLS_TONE = {
+  raised: "",
+  tint: "gv-cells-tint",
+  /**
+   * The cells on a hue's plate, and the 1px rules between them in that hue's
+   * edge. The rules are the block's own background showing through a 1px gap,
+   * so colouring them means colouring the container — which is why this tone
+   * sets a background on the grid itself as well as on every cell.
+   *
+   * The child selector has to be written as an arbitrary variant because the
+   * cells are `children`, not elements this component renders: `.gv-cells > *`
+   * in globals.css already paints them white, and only a utility of equal
+   * specificity emitted after it can take that back.
+   */
+  hue: "border-[var(--plate-border,var(--gv-line))] bg-[var(--plate-border,var(--gv-line))] [&>*]:bg-[var(--plate,var(--gv-layer-tint))]",
+} as const;
+
 export function Cells({
   children,
   columns = 4,
   tone = "raised",
   raised = false,
   className,
+  hue,
   as: Tag = "div",
 }: {
   children: ReactNode;
   columns?: 2 | 3 | 4;
-  /** `tint` puts the cells on the brand wash instead of white. */
-  tone?: "raised" | "tint";
+  /** `tint` puts the cells on the brand wash instead of white; `hue` puts them
+   *  on the plate of whichever categorical hue is in force. */
+  tone?: keyof typeof CELLS_TONE;
   /** Adds the raised shadow, for a block that is the point of its section. */
   raised?: boolean;
   className?: string;
+  /** A categorical hue name. See the note at the top of this file. */
+  hue?: string;
   as?: "div" | "ul" | "dl" | "section";
 }) {
   const cols =
@@ -239,7 +391,8 @@ export function Cells({
         : "sm:grid-cols-2 lg:grid-cols-4";
   return (
     <Tag
-      className={`gv-cells ${tone === "tint" ? "gv-cells-tint" : ""} ${raised ? "gv-cells-raised" : ""} ${cols} ${className ?? ""}`}
+      style={hue ? hueStyle(hue) : undefined}
+      className={`gv-cells ${CELLS_TONE[tone]} ${raised ? "gv-cells-raised" : ""} ${cols} ${className ?? ""}`}
     >
       {children}
     </Tag>
