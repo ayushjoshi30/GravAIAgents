@@ -12,7 +12,7 @@ import { TextArea } from "@/components/ui/Field";
 import { DataModeBanner, InlineNote } from "@/components/ui/States";
 import { StatTile } from "@/components/ui/Stat";
 import { DefinitionRow, Panel } from "@/components/ui/Surface";
-import { api, type RunOut, type RunStepOut } from "@/lib/api";
+import { api, type RunOut, type RunStepOut, runDuration } from "@/lib/api";
 import { AGENTS_BY_ID } from "@/lib/agents";
 import {
   formatCount,
@@ -266,7 +266,10 @@ export default function RunDetailPage() {
           value={<StatusBadge status={data.status} />}
           note={data.escalated ? "Waiting on a human" : "No escalation"}
         />
-        <StatTile label="Elapsed" value={formatDuration(data.duration_ms)} />
+        {/* Derived from the timestamps, because the API does not send a
+            duration. It read "—" before — a dash where the answer was two
+            fields away. */}
+        <StatTile label="Elapsed" value={formatDuration(runDuration(data))} />
         <StatTile label="Cost" value={formatInr(data.cost_inr)} accent="brand" />
         <StatTile label="Tokens" value={formatTokens(totalTokens)} />
         <StatTile label="Steps" value={formatCount(steps.length)} accent="blue" />

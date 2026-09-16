@@ -6,7 +6,7 @@ import { Chip, Eyebrow, Skeleton, type Tone } from "@/components/console/primiti
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextField } from "@/components/ui/Field";
 import { ApiFailureBanner, UnknownRatherThanEmpty } from "@/components/ui/States";
-import { type RunOut, api } from "@/lib/api";
+import { type RunOut, api, runDuration } from "@/lib/api";
 import { AGENTS } from "@/lib/agents";
 import { formatCount, formatDuration, formatInr, formatTimeIst } from "@/lib/format";
 import { useToken } from "@/lib/session";
@@ -154,7 +154,7 @@ export default function RunsPage() {
       if (!needle) return true;
       return (
         run.id.toLowerCase().includes(needle) ||
-        run.tenant.toLowerCase().includes(needle) ||
+        (run.tenant ?? "").toLowerCase().includes(needle) ||
         (run.application_id ?? "").toLowerCase().includes(needle)
       );
     });
@@ -390,7 +390,11 @@ function RunRow({ run }: { run: RunOut }) {
 
       <dl className="col-span-2 flex flex-wrap gap-x-4 gap-y-0.5">
         <Pair label="Started" value={formatTimeIst(run.started_at)} />
-        <Pair label="Tenant" value={run.tenant} />
+        {/* Only when the payload carries it. An always-blank Tenant row
+            reads as 'this run has no tenant', which is not what is true:
+            /v1/runs does not send the field. Every run here belongs to the
+            token's tenant by construction, so its absence costs nothing. */}
+        {run.tenant ? <Pair label="Tenant" value={run.tenant} /> : null}
         <div className="flex items-baseline gap-1.5">
           <dt className="text-[11px] text-ink-4">Application</dt>
           <dd>
@@ -407,7 +411,13 @@ function RunRow({ run }: { run: RunOut }) {
           </dd>
         </div>
         <Pair label="Cost" value={formatInr(run.cost_inr)} />
-        <Pair label="Duration" value={formatDuration(run.duration_ms)} />
+        <Pair
+          label="Duration"
+          value={(() => {
+            const ms = runDuration(run);
+            return ms === null ? "still running" : formatDuration(ms);
+          })()}
+        />
       </dl>
     </li>
   );
@@ -461,13 +471,16 @@ function compare(a: RunOut, b: RunOut, key: string): number {
     case "cost_inr":
       return a.cost_inr - b.cost_inr;
     case "duration_ms":
-      return a.duration_ms - b.duration_ms;
+      // Runs still in flight have no duration. They sort last rather than
+      // as zero, which would put the longest-running work at the top of an
+      // ascending sort as though it had finished instantly.
+      return (runDuration(a) ?? Infinity) - (runDuration(b) ?? Infinity);
     case "status":
       return a.status.localeCompare(b.status);
     case "agent_id":
       return a.agent_id.localeCompare(b.agent_id);
     case "tenant":
-      return a.tenant.localeCompare(b.tenant);
+      return (a.tenant ?? "").localeCompare(b.tenant ?? "");
     default:
       return a.started_at.localeCompare(b.started_at);
   }

@@ -412,18 +412,60 @@ export interface RunStepOut {
   started_at: string;
 }
 
+/**
+ * A run, as the API actually sends it.
+ *
+ * THREE FIELDS WERE DECLARED HERE THAT THE API DOES NOT SEND: `tenant`, `band`
+ * and `duration_ms`. `RunOut` in routers/runs.py has id, agent_id,
+ * application_id, status, escalated, escalation_reason, cost_inr, api_calls,
+ * started_at and finished_at — and nothing else.
+ *
+ * Declaring them as present was not a harmless inaccuracy. TypeScript believed
+ * it, so `run.tenant.toLowerCase()` in the runs filter and
+ * `a.tenant.localeCompare(b.tenant)` in its sort both compiled clean and both
+ * threw the moment a real row reached them — the filter on the first keystroke
+ * of a search, which is why it looked like "an error as I type". A type that
+ * overstates what arrives converts a missing field from a visible gap into a
+ * runtime crash somewhere else entirely.
+ *
+ * They are optional now, so the compiler points at every place that has to
+ * cope. `duration_ms` in particular is derivable — `finished_at - started_at` —
+ * which is better than a field nobody sends.
+ */
 export interface RunOut {
   id: string;
-  tenant: string;
   agent_id: string;
   application_id: string | null;
   status: RunStatus;
-  band: string | null;
   cost_inr: number;
-  duration_ms: number;
   escalated: boolean;
+  escalation_reason?: string | null;
+  api_calls?: number;
   started_at: string;
+  finished_at?: string | null;
+  /** Not sent by /v1/runs today. Present on some richer payloads. */
+  tenant?: string;
+  /** Not sent by /v1/runs today; a risk band lives in the run's output. */
+  band?: string | null;
+  /** Not sent by /v1/runs. Prefer `runDuration()`, which derives it. */
+  duration_ms?: number;
   steps?: RunStepOut[];
+}
+
+/**
+ * How long a run took, in milliseconds, or null when it cannot be known.
+ *
+ * Derived from the two timestamps the API does send rather than read from a
+ * `duration_ms` it does not. Null for a run still in flight — which is a real
+ * state and must not be rendered as a duration of zero.
+ */
+export function runDuration(run: RunOut): number | null {
+  if (typeof run.duration_ms === "number") return run.duration_ms;
+  if (!run.finished_at) return null;
+  const started = Date.parse(run.started_at);
+  const finished = Date.parse(run.finished_at);
+  if (Number.isNaN(started) || Number.isNaN(finished)) return null;
+  return Math.max(0, finished - started);
 }
 
 export interface TaskOut {
@@ -856,11 +898,6 @@ export const api = {
   getAgent: (token: string | null, id: string, signal?: AbortSignal) =>
     request<AgentOut>(`/v1/agents/${encodeURIComponent(id)}`, { token, signal }),
 
-  /**
-   * Execute one agent. The only call in this client that does work rather than
-   * reading it, so it is deliberately slow: several agents read documents
-   * first, and the credit pipeline reads eight of them.
-   */
   agentInputs: (token: string | null, id: string, signal?: AbortSignal) =>
     request<AgentInputsOut>(`/v1/agents/${encodeURIComponent(id)}/inputs`, { token, signal }),
 
@@ -877,20 +914,47 @@ export const api = {
       signal,
     }),
 
+  /**
+   * Execute one agent. The only call in this client that does work rather than
+   * reading it, so it is deliberately slow: several agents read documents
+   * first, and the credit pipeline reads eight of them.
+   *
+   * `documentIds` are ids from `POST /v1/documents`. They travel as
+   * `document_ids` beside `inputs` and `source` because the platform resolves
+   * each one itself — against the CALLER'S tenant, which is the whole point of
+   * the field — and hands what it finds to the runner in the same place the
+   * data-source connector puts documents. That is why an uploaded document
+   * shows up in the run's `source` report rather than in a result field of its
+   * own, and why a run given both a source URL and uploaded ids comes back with
+   * one document count covering both: nothing downstream can tell them apart,
+   * so nothing upstream should claim to.
+   *
+   * An id that is not the caller's answers 404 exactly as an id that never
+   * existed does, so there is nothing here for a caller to learn by guessing.
+   *
+   * The key is omitted when nothing is attached rather than sent as an empty
+   * list, so a run that carries no documents posts the body older API builds
+   * already accept.
+   */
   runAgent: (
     token: string | null,
     id: string,
     inputs: Record<string, unknown> = {},
     source: { url: string; headers?: Record<string, string> } | null = null,
+    documentIds: string[] = [],
     signal?: AbortSignal,
-  ) =>
-    request<AgentRunResult>(`/v1/agents/${encodeURIComponent(id)}/run`, {
+  ) => {
+    const body: Record<string, unknown> = { inputs };
+    if (source) body.source = source;
+    if (documentIds.length > 0) body.document_ids = documentIds;
+    return request<AgentRunResult>(`/v1/agents/${encodeURIComponent(id)}/run`, {
       token,
       method: "POST",
-      body: source ? { inputs, source } : { inputs },
+      body,
       timeoutMs: 180_000,
       signal,
-    }),
+    });
+  },
 
   mcpSurface: (token: string | null, signal?: AbortSignal) =>
     request<McpSurfaceOut>("/v1/mcp/tools", { token, signal }),

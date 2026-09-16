@@ -17,6 +17,7 @@ import {
   type AuditEntryOut,
   type EligibilityOut,
   type RunOut,
+  runDuration,
 } from "@/lib/api";
 import {
   formatCount,
@@ -351,7 +352,7 @@ export default function ApplicationDetailPage() {
                       {formatInr(run.cost_inr)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-[12px]" data-numeric="">
-                      {formatDuration(run.duration_ms)}
+                      {formatDuration(runDuration(run))}
                     </td>
                   </tr>
                 ))}
