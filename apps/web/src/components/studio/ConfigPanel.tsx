@@ -152,6 +152,14 @@ export function ConfigPanel({
   const errors = problems.filter((p) => p.severity === "error");
   const warnings = problems.filter((p) => p.severity === "warning");
 
+  // Set only when this node will actually produce a narration, which is when
+  // its prompt is non-empty. `prompt` exists on agent.* nodes; on every other
+  // node type this is simply undefined and nothing is listed.
+  const narrationAddress =
+    typeof node.config?.prompt === "string" && node.config.prompt.trim()
+      ? `{{nodes.${node.id}.narration}}`
+      : "";
+
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-line bg-surface">
       <div className="flex items-start gap-2 border-b border-line px-4 py-3">
@@ -229,6 +237,28 @@ export function ConfigPanel({
                   <span className="text-[11px] text-ink-3">{port.type}</span>
                 </li>
               ))}
+
+              {/* The narration's address, listed only once there is one.
+                  
+                  It is deliberately not a declared output port on the node
+                  spec. Ports come from the agent's own output model, and a port
+                  that exists only when someone has filled in a prompt would
+                  promise a field that almost every node on the canvas does not
+                  have. But leaving it out of this list entirely meant a person
+                  could configure a narration and then have nowhere to look for
+                  how to reference it — the address was only in the config
+                  field's help text, which is above them and collapsed.
+                  
+                  So it appears here when, and only when, the node actually
+                  produces one. The separate `narration.` segment is the whole
+                  safety property made visible: everything above it came from
+                  the agent, and anything under it came from a model. */}
+              {narrationAddress ? (
+                <li className="flex items-baseline gap-2 border-t border-line-2 pt-1.5">
+                  <code className="font-mono text-[11px] text-brand">{narrationAddress}</code>
+                  <span className="text-[11px] text-ink-3">written by a model</span>
+                </li>
+              ) : null}
             </ul>
           </div>
         ) : null}
