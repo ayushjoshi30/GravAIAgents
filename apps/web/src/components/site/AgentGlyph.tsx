@@ -31,8 +31,24 @@ function circle(cx: number, cy: number, r: number): string {
   return `M${cx + r} ${cy}a${r} ${r} 0 1 1-${r * 2} 0 ${r} ${r} 0 0 1 ${r * 2} 0`;
 }
 
-/** The structural layer: axes, frames, tracks, anything not being measured. */
-const MUTED = "stroke-brand-200 transition-colors duration-200 ease-gv group-hover:stroke-brand-300";
+/**
+ * The structural layer: axes, frames, tracks, anything not being measured.
+ *
+ * It takes the agent's own hue rather than the brand's navy. These were
+ * `stroke-brand-200` and `stroke-brand-300`, which was invisible until the
+ * catalog moved onto the categorical palette: on an orange or pink card the
+ * measured line took the agent's hue while the axes it was drawn against
+ * stayed faintly navy, so a single motif was wearing two unrelated families.
+ *
+ * `AgentCard` publishes the four `--plate-*` properties on its root link, and
+ * custom properties inherit, so the glyph sees them without being passed
+ * anything. The fallbacks are the old navy values, which matter if this
+ * component is ever rendered outside a card that publishes a plate — it would
+ * otherwise lose its structural strokes entirely and the motif would read as a
+ * line floating in space.
+ */
+const MUTED =
+  "stroke-[color:var(--plate-border,var(--color-brand-200))] transition-colors duration-200 ease-gv group-hover:stroke-[color:var(--plate-accent,var(--color-brand-300))]";
 
 /**
  * A line that CARRIES work, as opposed to one that measures it.
