@@ -22,8 +22,22 @@
  * credit rules we do not know, and a plausible-looking threshold someone forgot
  * to change is exactly the kind of thing that ends up in production.
  *
- * The one exception is the Input node, which carries no schema at all. See the
- * note on INPUT_CONFIG below.
+ * There are three exceptions, and each one is argued where it sits. The Input
+ * node carries no schema at all, for the reason set out on INPUT_CONFIG below.
+ * The Credit agent's risk node carries a narration prompt and the shape of the
+ * reply, for the reason set out on NARRATE_THE_SCORE. And the MSME template's
+ * MCP node carries an explicitly blank server and tool, which is not the same
+ * thing as carrying nothing: see the note where it is placed.
+ *
+ * WHERE "EMPTY CONFIG" IS NOT EMPTY. `_setting()` in the engine reads
+ * `node.config.get(name, spec_default)`, so a setting a template omits is a
+ * setting the engine fills in from the registry's default at run time, while
+ * the config panel shows the box blank. For most fields the default is itself
+ * blank and the two agree. Where a registry default is NOT blank, a template
+ * that omits the field is quietly shipping that default under a blank box, and
+ * the only safe habit is to write the blank out. That is the whole argument on
+ * the MCP node below, and it is why anything added here should be checked
+ * against the registry rather than against the panel.
  */
 
 import type { WorkflowDefinition, WorkflowNode } from "@/lib/studio";
@@ -47,6 +61,76 @@ import type { WorkflowDefinition, WorkflowNode } from "@/lib/studio";
  * way to a working workflow, and a template should not imply that it is.
  */
 const INPUT_CONFIG: Record<string, unknown> = {};
+
+/**
+ * The narration asked for on the Credit agent's risk node.
+ *
+ * This sits on `agent.risk_scoring` itself rather than on a separate `llm` node
+ * placed after it, and the difference is not presentational. An agent node's
+ * `prompt` and `output_schema` run inside `_agent_executor`, after the score
+ * exists: the scored payload is copied through verbatim, the model's answer is
+ * put beside it under `narration`, and asking for a key the agent itself
+ * produces is refused in the engine with a warning rather than honoured. The
+ * agent's own `publish_facts` is applied to the scored payload before the model
+ * is called at all, so there is no route — not even a wrong config — by which a
+ * generated value reaches the facts a later `condition` branches on.
+ *
+ * A standalone `llm` node reading `{{nodes.risk_scoring.*}}` produces similar
+ * words and none of that. Its output is an arbitrary object, its `publish_facts`
+ * will write whatever keys the model returned straight into the facts, and in a
+ * shape where the next node is the branch that decides the loan, the distance
+ * between the starter and a decision that turns on generated text is one field
+ * in a config panel. Starters are copied, so the starter has to be the shape
+ * that cannot go wrong, not the shape that happens not to have yet.
+ *
+ * WHY THE PROMPT IS WORDED THE WAY IT IS. By the time this runs, the scorecard
+ * has decided. `_narrate` appends the agent's whole result to the prompt, so
+ * the wording does not restate the figures — restating them by expression would
+ * add half a dozen `{{...}}` references that render leniently, which means a
+ * single typo ships literal braces to the model and comes back as prose about
+ * nothing. `{{result.model_version}}` is the one reference kept, because the
+ * form is worth teaching and the test checks it names a real port. What the
+ * prompt asks for is sentences. It never asks for a probability, a band, a
+ * score or a recommendation, because arithmetic comes from code and language
+ * comes from the model — a generated number that looks like a scored one is the
+ * single failure this platform cannot have, and teaching that habit on the
+ * template most people open first is how it would spread.
+ *
+ * WHY THESE KEYS. `output_schema` here maps a field name to a description of
+ * what belongs in it, not to a type — that is what the registry's help text
+ * asks for and what `_narrate` passes to the model. Both names say "prose" out
+ * loud and neither could be mistaken for a figure or a verdict, which matters
+ * because the keys are the machine-readable statement of what this node asks a
+ * model to produce. They also avoid every name the agents in these templates
+ * return — risk scoring has its own `explanation` and its own
+ * `reasoning_summary` — so nobody reading a run has to work out whether a field
+ * is the scorecard accounting for itself or the model retelling it.
+ * `tests/test_studio_templates.py` holds all three of those lines.
+ */
+const NARRATE_THE_SCORE: Record<string, unknown> = {
+  prompt: [
+    "Scorecard {{result.model_version}} has already scored this application, and " +
+      "its full result is below.",
+    "",
+    "Write the note an underwriter reads before opening the file: what the top " +
+      "drivers say about this borrower in plain English, and what the imputed " +
+      "values leave unanswered. Where you mention the probability or the band, " +
+      "quote them exactly as they stand in the result.",
+    "",
+    "Do not offer a probability, a band, a score or a recommendation of your " +
+      "own. That call is already made, by code, and your work here is to put it " +
+      "into words a person can act on.",
+  ].join("\n"),
+  output_schema: {
+    plain_english:
+      "Two or three sentences putting the drivers above into the words an " +
+      "underwriter would use. Describe what the scorecard found; do not restate " +
+      "it as a judgement of your own.",
+    open_questions:
+      "What the imputed values leave unanswered, as a list of things a person " +
+      "could go and check before this file is decided.",
+  },
+};
 
 /** Grid spacing, so every template is laid out on the same rhythm. */
 const COL = 330;
@@ -83,16 +167,21 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
     id: "credit",
     label: "Credit agent",
     blurb:
-      "Reads the documents and the statements, scores the risk, and puts anything outside the green band in front of an underwriter.",
+      "Reads the documents and the statements, scores the risk, writes the explanation a person reads, and puts anything outside the green band in front of an underwriter.",
     build: () => ({
       name: "Credit agent",
       description:
-        "Retail loan decisioning end to end: document intelligence, statement analytics, a risk score, and a human for everything the policy does not clear outright.",
+        "Retail loan decisioning end to end: document intelligence, statement analytics, a risk score, the explanation that goes with it, and a human for everything the policy does not clear outright.",
       nodes: [
         node("input", "input", "Application received", 0, 1, INPUT_CONFIG),
         node("doc_intelligence", "agent.doc_intelligence", "Read the documents", 1, 0),
         node("bank_statements", "agent.bank_statement_analytics", "Read the statements", 1, 2),
-        node("risk_scoring", "agent.risk_scoring", "Score the risk", 2, 1),
+        // The explanation lives on the scoring node, not on a node after it.
+        // The words and the figures they describe come out of one step, in one
+        // place in the trace, and the reviewer who reaches the branch has
+        // already been handed the reason it will go the way it goes. What this
+        // node may and may not be asked to say is argued on NARRATE_THE_SCORE.
+        node("risk_scoring", "agent.risk_scoring", "Score the risk", 2, 1, NARRATE_THE_SCORE),
         node("band", "condition", "Risk band is GREEN", 3, 1),
         node("credit_appraisal", "agent.credit_appraisal", "Write the memorandum", 4, 0),
         node("human_approval", "human_approval", "Underwriter decides", 4, 2),
@@ -117,14 +206,39 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
     id: "msme",
     label: "MSME underwriting",
     blurb:
-      "Cross-verifies GST and bank data for a business borrower, then routes the file to a person for the final call.",
+      "Cross-verifies GST and bank data for a business borrower, adds whatever your own systems know, then routes the file to a person for the final call.",
     build: () => ({
       name: "MSME underwriting",
       description:
-        "Business lending: consented bank data and statement analytics feed MSME underwriting, and a person signs the decision.",
+        "Business lending: consented bank data, statement analytics and a tool of your own feed MSME underwriting, and a person signs the decision.",
       nodes: [
         node("input", "input", "Application received", 0, 1, INPUT_CONFIG),
         node("aa_data", "agent.aa_data", "Fetch consented bank data", 1, 0),
+        // Where data that is not ours enters the workflow. One template shows
+        // this door, and this is the one where it belongs: a business borrower
+        // is usually already known to the lender's own systems, so the file is
+        // thinner than it should be until those systems are asked.
+        //
+        // The server and the tool are written out as blank on purpose, and this
+        // is the one place a template must not simply omit a setting. `mcp`
+        // declares both as required with registry defaults of
+        // `https://credit.pilotpod.in/mcp` and `score_risk`, and a template that
+        // left them out would inherit those: the panel would show two empty
+        // boxes while a run of the untouched starter called this platform's own
+        // retail scorecard on fixture inputs and dropped a 30+ DPD probability
+        // into the trace of a business-lending workflow. A figure nobody asked
+        // for, about a borrower it was not computed from, is fabricated data
+        // however real the code that produced it.
+        //
+        // Blank instead makes the node fail validation with "needs MCP server"
+        // until the tenant names theirs. That is a starter that cannot be
+        // deployed unedited, which is the correct trade: the message names the
+        // two fields to fill in, and the alternative is a wrong answer given
+        // quietly.
+        node("mcp_tool", "mcp", "Call a tool on your MCP server", 1, 1, {
+          server: "",
+          tool: "",
+        }),
         node("bank_statements", "agent.bank_statement_analytics", "Read the statements", 1, 2),
         node("msme", "agent.msme_underwriting", "Underwrite the business", 2, 1),
         node("human_approval", "human_approval", "Credit head decides", 3, 1),
@@ -132,8 +246,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
       ],
       edges: [
         edge("input", "aa_data"),
+        edge("input", "mcp_tool"),
         edge("input", "bank_statements"),
         edge("aa_data", "msme"),
+        edge("mcp_tool", "msme"),
         edge("bank_statements", "msme"),
         edge("msme", "human_approval"),
         edge("human_approval", "output"),

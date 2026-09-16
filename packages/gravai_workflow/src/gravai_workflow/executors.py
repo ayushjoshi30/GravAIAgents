@@ -856,6 +856,116 @@ async def _set_state(node: NodeInstance, ctx: ExecutionContext) -> NodeOutcome:
 
 # --- the GravAI agents ------------------------------------------------------
 
+#: The one key an agent node's narration is allowed to occupy. Everything the
+#: agent scored stays at the top level and everything the model wrote sits
+#: under this name, so `{{nodes.risk.probability_30dpd_6m}}` can only ever be
+#: the scorecard's figure and `{{nodes.risk.narration.probability_30dpd_6m}}`
+#: can only ever be prose about it. Nobody reading a workflow should have to
+#: know which fields an agent declares in order to tell the two apart.
+NARRATION_KEY = "narration"
+
+#: Said to the model every time a narration is asked for. The agent has already
+#: decided; this call is here to put what it decided into words, and a model
+#: that recomputes a figure it was shown is the one failure that would make the
+#: whole feature unsafe to offer.
+_NARRATION_SYSTEM = (
+    "You describe a result that has already been produced by a versioned model "
+    "and by code. Every figure and every finding you are shown was computed "
+    "before you were called: state what it says, quote it exactly, and never "
+    "recompute, re-round, re-rank or invent one."
+)
+
+
+async def _narrate(
+    node: NodeInstance, ctx: ExecutionContext, payload: dict[str, Any]
+) -> tuple[Any, int, int, Decimal]:
+    """Put an agent's result into the words the canvas asked for.
+
+    `payload` is read and never written. What comes back is the narration —
+    prose, or an object holding exactly the keys the node asked for — and it is
+    the caller's job to keep it in its own namespace.
+
+    `None` is returned when the node asked for no narration, which is the case
+    for nearly every node on nearly every canvas. That is the whole reason for
+    the early return below: a node that did not ask for prose must not reach
+    the model, must not wait for it and must not be charged for it.
+    """
+    raw = _setting(node, "prompt", "")
+    instruction = raw if isinstance(raw, str) else json.dumps(raw, default=str)
+    if not instruction.strip():
+        return None, 0, 0, Decimal("0")
+
+    schema = _setting(node, "output_schema", {})
+    if schema and not isinstance(schema, dict):
+        # The panel takes free JSON here and `["headline", "next_step"]` is the
+        # shape most people reach for first. Read past in silence it would
+        # withdraw both of the setting's promises at once: the reply is not
+        # shaped, and — the one that matters — the check below that refuses a
+        # key the agent has already scored never runs. A setting that quietly
+        # does nothing is worse than one that is refused, so the node says what
+        # it ignored and what that costs the person who wrote it.
+        ctx.state.warnings.append(
+            f"{node.title}: the narration fields must be an object of name to description, "
+            f"not {type(schema).__name__}, so the narration comes back as prose and no key "
+            "was checked against the fields this agent produces"
+        )
+        schema = {}
+
+    if isinstance(schema, dict):
+        for name in schema:
+            if name not in payload:
+                continue
+            # Named rather than quietly namespaced away. Asking the model for a
+            # field the agent itself produces is someone expecting a scored
+            # value to be improved upon, and the answer is that it cannot be:
+            # the agent's value stands untouched and the model's opinion is
+            # readable only at an address that says what it is.
+            address = "{{nodes." + f"{node.id}.{NARRATION_KEY}.{name}" + "}}"
+            ctx.state.warnings.append(
+                f"{node.title}: the narration asks for {name!r}, which this agent already "
+                f"produces. The agent's value stands; the narration's is at {address}."
+            )
+
+    # The agent's own result is addressable as `result` because it is not in the
+    # shared state yet — the engine records a node's output only once this
+    # executor has returned. Without it a prompt could not refer to the very
+    # thing it is being asked to describe.
+    prompt = render(instruction, {**ctx.scope(), "result": payload}, strict=False)
+
+    system = _NARRATION_SYSTEM
+    if isinstance(schema, dict) and schema:
+        system = (
+            f"{system}\n\nAnswer with JSON only, with exactly these keys: "
+            f"{', '.join(schema)}. No prose, no code fences."
+        )
+
+    text, input_tokens, output_tokens, cost = await _call_model(
+        ctx,
+        system,
+        f"{prompt}\n\nWhat the agent produced:\n{json.dumps(payload, indent=2, default=str)}",
+        temperature=0.2,
+        max_tokens=600,
+    )
+
+    if ctx.sandbox:
+        ctx.state.warnings.append(
+            f"{node.title}: the language model is sandboxed, so this narration is canned"
+        )
+
+    if not (isinstance(schema, dict) and schema):
+        return text, input_tokens, output_tokens, cost
+
+    data = {key: value for key, value in _json_object(text).items() if key in schema}
+    missing = [key for key in schema if key not in data]
+    if missing:
+        # Named rather than silently absent, for the same reason the LLM node
+        # names them: a downstream node reading a key the model never returned
+        # would fail a long way from the cause.
+        ctx.state.warnings.append(
+            f"{node.title}: the narration did not return {', '.join(missing)}"
+        )
+    return data, input_tokens, output_tokens, cost
+
 
 def _agent_executor(agent_id: str):
     async def run(node: NodeInstance, ctx: ExecutionContext) -> NodeOutcome:
@@ -909,15 +1019,71 @@ def _agent_executor(agent_id: str):
         summary = getattr(result.output, "reasoning_summary", "") or f"{agent_id} completed"
         ctx.state.summaries.append(summary)
 
+        # Last, and deliberately so. The escalation, the guardrail violations
+        # and the published facts are the record of what the agent decided;
+        # they are all in the state before a single token is spent describing
+        # them, so nothing about that record can turn on whether the model
+        # answered.
+        narration: Any = None
+        input_tokens = output_tokens = 0
+        narration_cost = Decimal("0")
+        try:
+            narration, input_tokens, output_tokens, narration_cost = await _narrate(
+                node, ctx, payload
+            )
+        except Exception as exc:
+            # A narration is commentary on a result that already exists, so a
+            # model that cannot produce one must not take the result down with
+            # it. Letting this reach the engine would fail the node, discard a
+            # score that was computed correctly and skip everything downstream
+            # of it — over the wording.
+            ctx.state.warnings.append(
+                f"{node.title}: the narration could not be produced — {type(exc).__name__}: {exc}"
+            )
+
+        # A new dictionary, never `payload` itself, and the narration lands on
+        # one key of it. This is the line the product's central claim rests on:
+        # what the agent scored is copied through verbatim, and the model's
+        # wording is reachable only through a name that says it is wording.
+        outputs: dict[str, Any] = dict(payload)
+        if narration is not None:
+            if NARRATION_KEY in outputs:
+                # No agent declares a field by this name today and the suite
+                # asserts it, so this is unreachable — but a generated value
+                # standing where a scored one was expected is the single
+                # failure this design exists to prevent, and "unreachable"
+                # is not a guarantee. The agent's field wins and the narration
+                # stays in the trace, where nothing can address it.
+                ctx.state.warnings.append(
+                    f"{node.title}: {agent_id} produces a field named {NARRATION_KEY!r} of its "
+                    "own, so the narration is recorded in the trace only and cannot be "
+                    "referenced downstream"
+                )
+            else:
+                outputs[NARRATION_KEY] = narration
+
         return NodeOutcome(
-            outputs=payload,
+            outputs=outputs,
             summary=summary[:120],
-            cost_inr=result.cost_inr,
+            # The agent's cost plus the narration's own, and nothing else moves:
+            # describing a result does not change what producing it cost. The
+            # token counts are the narration's alone, because an agent's
+            # internal calls are priced into `result.cost_inr` rather than
+            # broken out.
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_inr=result.cost_inr + narration_cost,
             detail={
                 "escalated": result.escalated,
                 "guardrails_passed": result.validation.ok,
                 "published_facts": published,
                 "overrides": resolved,
+                "narrated": narration is not None,
+                **(
+                    {NARRATION_KEY: narration}
+                    if narration is not None and NARRATION_KEY in payload
+                    else {}
+                ),
             },
         )
 

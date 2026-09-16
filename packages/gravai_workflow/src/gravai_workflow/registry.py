@@ -144,6 +144,34 @@ def _agent_nodes() -> dict[str, NodeSpec]:
                     default="",
                     help="Comma-separated output fields to write into workflow facts",
                 ),
+                ConfigField(
+                    "prompt",
+                    "Narration prompt",
+                    "textarea",
+                    default="",
+                    templated=True,
+                    help=(
+                        "Optional. What you want said about this agent's result, once the "
+                        "agent has produced it. The result is addressable here as "
+                        "{{result.<field>}}. The wording comes back under `narration`, "
+                        "apart from the agent's own fields and never among them: it "
+                        "describes what the agent produced and cannot change, replace or "
+                        "add to any of it. Left blank, no model is called and nothing is "
+                        "charged."
+                    ),
+                ),
+                ConfigField(
+                    "output_schema",
+                    "Narration fields",
+                    "json",
+                    default={},
+                    help=(
+                        "Optional. Field name to a description of what you want in it. Only "
+                        "these keys are kept, and they arrive under `narration` — asking for "
+                        "a name the agent itself produces cannot overwrite it, and is "
+                        "reported as the mistake it is. Empty gives a single piece of prose."
+                    ),
+                ),
             ),
             uses_llm=True,
             deterministic=False,
