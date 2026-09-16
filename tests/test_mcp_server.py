@@ -12,6 +12,7 @@ tears down in a different one.
 
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,10 +22,33 @@ from mcp.client.stdio import stdio_client
 
 REPO = Path(__file__).resolve().parents[1]
 
+#: The child's environment, passed explicitly because it is a real subprocess.
+#:
+#: `conftest.py` pins SARVAM_SANDBOX and clears the key before settings are
+#: imported, which covers every test running in THIS process. These do not:
+#: they spawn `python -m gravai_mcp.server`, and a child with no `env` reads
+#: `.env` for itself. The moment a developer put a real SARVAM_API_KEY and
+#: SARVAM_SANDBOX=0 in their own `.env` — which is the normal thing to do once
+#: you have a key — this file started making live, billed calls to
+#: api.sarvam.ai and failing with provider errors.
+#:
+#: The failure was loud, which was lucky. A suite that reaches a paid API
+#: because of what is in somebody's local environment can just as easily pass
+#: and quietly spend money, so the child is told what it is rather than left to
+#: infer it. `os.environ` is inherited first so PATH and the interpreter still
+#: work; only the provider settings are overridden.
+_SERVER_ENV = {
+    **os.environ,
+    "SARVAM_API_KEY": "",
+    "SARVAM_SANDBOX": "1",
+    "APP_ENV": "local",
+}
+
 PARAMS = StdioServerParameters(
     command=sys.executable,
     args=["-m", "gravai_mcp.server"],
     cwd=str(REPO),
+    env=_SERVER_ENV,
 )
 
 

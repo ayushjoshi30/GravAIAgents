@@ -19,6 +19,7 @@ from .routers import (
     applications,
     audit,
     connectors,
+    documents,
     health,
     mcp,
     runs,
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.appraise_router)
     app.include_router(runs.router)
     app.include_router(tasks.router)
+    app.include_router(documents.router)
     app.include_router(usage.router)
     app.include_router(audit.router)
     app.include_router(connectors.router)

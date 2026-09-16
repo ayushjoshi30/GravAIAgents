@@ -16,6 +16,10 @@
  *   GET  /v1/audit                           POST /v1/audit/verify
  *   GET  /v1/connectors
  *
+ * Landing alongside this console change, so it may 404 against an older API
+ * build — which this client reports as `not-implemented` like any other:
+ *   POST /v1/documents
+ *
  * Endpoints that land later are declared here and degrade to an empty state:
  *   /v1/runs  /v1/usage  /v1/tasks
  */
@@ -467,6 +471,376 @@ export interface GovernorStateOut {
   estimated_wait_seconds: number;
 }
 
+// --- Document upload ------------------------------------------------------
+
+/**
+ * What POST /v1/documents returns on 201, and nothing else.
+ *
+ * `uri` is a blob reference the platform resolves itself. DocumentRef's own
+ * docstring in the Sarvam layer is explicit that it "is never sent to the
+ * provider", so nothing in this console may treat it as a URL: it is not
+ * fetched here, not put in an <a href>, and not offered as a data-source URL,
+ * because the source fetcher takes public HTTP endpoints and a blob reference
+ * is not one.
+ */
+export interface DocumentUploadOut {
+  document_id: string;
+  uri: string;
+  mime_type: string;
+  filename: string;
+  bytes: number;
+  pages: number | null;
+  scanned_by: string;
+}
+
+/**
+ * The documented failures of the upload endpoint, kept apart from `FailureKind`.
+ *
+ * `request()` collapses every 4xx it does not recognise into `bad-response`,
+ * which is right for a JSON GET and wrong here: 413, 415, 422 and 503 each mean
+ * something specific to a person holding a file, and 503 in particular has to
+ * say that the scanner was unreachable and nothing was stored. Flattening those
+ * four into one grey "the API returned an error" would lose the only
+ * information the person needs to know what to do next.
+ */
+export type UploadFailureKind =
+  | FailureKind
+  | "empty-part"
+  | "too-large"
+  | "unsupported-type"
+  | "scan-flagged"
+  | "no-scanner"
+  | "no-answer"
+  | "cancelled";
+
+export interface UploadFailure {
+  ok: false;
+  kind: UploadFailureKind;
+  status?: number;
+  message: string;
+  /**
+   * Who wrote `message`.
+   *
+   * The console quotes the API's own sentence back to the person under the
+   * words "The API said:", and that attribution has to be true. A timeout
+   * sentence written here, printed under that heading, would put words into
+   * the mouth of a server that may never have received the request at all —
+   * which is the same class of mistake as reporting a scan finding that no
+   * scanner produced.
+   */
+  messageSource: "api" | "console";
+  correlationId?: string;
+}
+
+export type UploadResult = ApiSuccess<DocumentUploadOut> | UploadFailure;
+
+/**
+ * The headline for each failure, written so that every one of them states what
+ * happened to the file.
+ *
+ * Each sentence that can be read as "we have your file" is wrong unless the API
+ * answered 201, so every failure here states the file's fate outright — either
+ * that nothing was stored, or, in the handful of cases where the answer is
+ * genuinely not knowable from a browser, that it is not knowable. The
+ * scanner findings are phrased flatly on purpose: a person uploading a salary
+ * slip that trips a scanner has almost certainly not done anything wrong, and
+ * alarming copy would be both unkind and unearned — the console knows only that
+ * the scanner objected, not that the file is malicious.
+ */
+export const UPLOAD_FAILURE_COPY: Record<UploadFailureKind, string> = {
+  /*
+   * The seven generic kinds are rewritten here rather than inherited from
+   * `FAILURE_COPY`. Those sentences were written for a GET that fetched
+   * nothing, so none of them says anything about a file — and a person who has
+   * just handed one over is asking exactly one question. "The API returned an
+   * error" leaves them to assume, and the assumption people make is that the
+   * file went somewhere.
+   *
+   * Where this console genuinely cannot know — a 500, a body it could not
+   * read, a request that went out in full and was never answered — it says so
+   * in those words. Guessing "nothing was stored" there would be the same
+   * fabrication as guessing the opposite; the difference is only which way it
+   * happens to be wrong.
+   */
+  "no-token": "No API token is set, so nothing was sent and nothing was stored. Add one in Settings.",
+  unauthenticated: "The API rejected this token, so the upload was refused and nothing was stored.",
+  forbidden:
+    "This token does not carry the documents:write scope, so the upload was refused and nothing was stored.",
+  "not-implemented":
+    "The API build this console is pointed at has no upload endpoint, so there was nowhere to put the file and nothing was stored.",
+  unreachable:
+    "The connection to the API failed before the file had finished sending, so nothing was stored.",
+  server:
+    "The API failed while handling this upload. A 500 does not say whether the file was stored, and this console will not guess — check before uploading it again.",
+  "bad-response":
+    "The API answered in a way this console could not read, so it cannot say whether the file was stored.",
+  "no-answer":
+    "The file finished sending, but the API never answered. Whether it was stored is unknown from here — check before uploading it again.",
+  "empty-part": "That file came through with no content, so nothing was stored.",
+  "too-large": "That file is larger than the limit this deployment accepts. Nothing was stored.",
+  "unsupported-type": "This deployment does not accept that kind of file. Nothing was stored.",
+  "scan-flagged": "The scanner flagged something in this file, so it was not stored.",
+  "no-scanner":
+    "No virus scanner was reachable, so the file was not stored. Uploads stay closed until a scanner is configured — a file that cannot be scanned is never accepted.",
+  cancelled: "Upload cancelled before it finished sending. Nothing was stored.",
+};
+
+/** Which half of the request is in flight. The scan is the slow half. */
+export type UploadPhase = "uploading" | "scanning";
+
+export interface UploadProgress {
+  phase: UploadPhase;
+  /** Bytes the browser has confirmed it sent, or null when it will not say. */
+  sent: number | null;
+  /** Total bytes of the request body, or null when the browser will not say. */
+  total: number | null;
+}
+
+/**
+ * Upload one file to POST /v1/documents.
+ *
+ * WHY THIS IS XMLHttpRequest AND NOT `request()`. Two reasons, both about
+ * telling the truth. `request()` JSON-encodes its body and sets a JSON
+ * content type, which a multipart part cannot survive. And `fetch` will not
+ * report how much of a request body has gone out, so a fetch-based upload
+ * could only ever show a spinner — whereas `xhr.upload.onprogress` reports
+ * real bytes sent, and `xhr.upload.onload` fires at the exact moment the body
+ * is fully sent, which is the moment the wait stops being the network and
+ * starts being the scanner. That transition is the one thing worth showing a
+ * person here, and it is only observable this way.
+ *
+ * The timeout is generous because the scan is a real piece of work happening
+ * between the last byte sent and the first byte of the response, and a console
+ * that gives up at twelve seconds would report a healthy deployment as
+ * unreachable.
+ */
+export function uploadDocument(
+  token: string | null,
+  file: File,
+  options: {
+    applicationId?: string | null;
+    onProgress?: (progress: UploadProgress) => void;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {},
+): Promise<UploadResult> {
+  const { applicationId, onProgress, signal, timeoutMs = 120_000 } = options;
+
+  if (!token) {
+    return Promise.resolve({
+      ok: false,
+      kind: "no-token",
+      message: UPLOAD_FAILURE_COPY["no-token"],
+      messageSource: "console",
+    });
+  }
+
+  const form = new FormData();
+  // The part name is "file" and the field name is "application_id" because the
+  // endpoint contract says so; both agents build against that spelling.
+  form.append("file", file, file.name);
+  const application = (applicationId ?? "").trim();
+  if (application) form.append("application_id", application);
+
+  return new Promise<UploadResult>((resolve) => {
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+    /**
+     * Whether the whole body went out before the connection failed.
+     *
+     * This is the only thing that separates "the upload never got there" from
+     * "the server may well have it and never said so", and the two deserve
+     * opposite sentences. Without it every dropped connection would have to
+     * claim one or the other for both cases, and half the time it would be
+     * telling someone their file is gone when the platform is holding it.
+     */
+    let bodyFullySent = false;
+
+    function finish(result: UploadResult): void {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        finish({
+          ok: false,
+          kind: "cancelled",
+          message: UPLOAD_FAILURE_COPY.cancelled,
+          messageSource: "console",
+        });
+        return;
+      }
+      signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    }
+
+    xhr.open("POST", `${API_BASE}/v1/documents`, true);
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    // Content-Type is deliberately not set: the browser has to write it itself
+    // so that the multipart boundary it generated is the one it declares.
+
+    if (onProgress) {
+      xhr.upload.onprogress = (event) => {
+        onProgress({
+          phase: "uploading",
+          // `lengthComputable` false means the browser is not telling us the
+          // total. Reporting null lets the caller show an indeterminate
+          // indicator rather than compute a percentage out of a guess.
+          sent: event.lengthComputable ? event.loaded : null,
+          total: event.lengthComputable ? event.total : null,
+        });
+      };
+    }
+
+    // Recorded whether or not anyone asked for progress, because what this
+    // fact decides — which sentence a dropped connection gets — is owed to
+    // every caller, not only to one that wanted a bar.
+    xhr.upload.onload = () => {
+      // The body is fully sent. Everything from here is the server reading,
+      // scanning and storing, and there is no honest number for that.
+      bodyFullySent = true;
+      onProgress?.({ phase: "scanning", sent: null, total: null });
+    };
+
+    xhr.onabort = () =>
+      finish({
+        ok: false,
+        kind: "cancelled",
+        message: UPLOAD_FAILURE_COPY.cancelled,
+        messageSource: "console",
+      });
+
+    xhr.ontimeout = () =>
+      finish({
+        ok: false,
+        kind: bodyFullySent ? "no-answer" : "unreachable",
+        message: bodyFullySent
+          ? "The file finished sending, but the API did not answer within the upload timeout. Whether it was stored is unknown from here — check before uploading it again."
+          : "The upload timed out before the file had finished sending, so nothing was stored.",
+        // Written here, not by the server: the server said nothing at all.
+        messageSource: "console",
+      });
+
+    xhr.onerror = () => {
+      const kind: UploadFailureKind = bodyFullySent ? "no-answer" : "unreachable";
+      finish({ ok: false, kind, message: UPLOAD_FAILURE_COPY[kind], messageSource: "console" });
+    };
+
+    xhr.onload = () => {
+      const rawText = xhr.responseText ?? "";
+      let parsed: unknown = undefined;
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          parsed = undefined;
+        }
+      }
+
+      const problem = (parsed ?? {}) as ProblemDetail;
+      const correlationId =
+        xhr.getResponseHeader("X-Correlation-Id") ?? problem.correlation_id ?? undefined;
+      // `readableDetail` falls back to "<status> <statusText>" when a body
+      // carried no words of its own, which is a fine last resort for a generic
+      // call and useless here — the caller would attribute "503" to the API as
+      // though it were an explanation. Quote the API only when it wrote a
+      // sentence; otherwise the copy below, which actually says what became of
+      // the file, stands alone.
+      const wroteSomething =
+        (typeof problem.detail === "string" && problem.detail.trim().length > 0) ||
+        Array.isArray(problem.detail) ||
+        (typeof problem.title === "string" && problem.title.trim().length > 0);
+      const said = wroteSomething ? readableDetail(problem, xhr.status, xhr.statusText) : "";
+
+      // 201 AND NOTHING ELSE IS "STORED". The contract names exactly one
+      // success status, so any other 2xx is a deployment this console does not
+      // understand, and calling it stored would be a guess about a file's
+      // safety. A 201 whose body is missing the id is the same guess, because
+      // an id is what makes a stored document referable at all.
+      if (xhr.status === 201) {
+        const document = parsed as DocumentUploadOut | null;
+        if (
+          !document ||
+          typeof document.document_id !== "string" ||
+          document.document_id.length === 0
+        ) {
+          finish({
+            ok: false,
+            kind: "bad-response",
+            status: xhr.status,
+            message:
+              "The API answered 201 but without a document id, so this console cannot say the file was stored.",
+            messageSource: "console",
+            correlationId: correlationId ?? undefined,
+          });
+          return;
+        }
+        finish({ ok: true, data: document });
+        return;
+      }
+
+      let kind: UploadFailureKind;
+      switch (xhr.status) {
+        case 400:
+          kind = "empty-part";
+          break;
+        case 401:
+          kind = "unauthenticated";
+          break;
+        case 403:
+          kind = "forbidden";
+          break;
+        case 404:
+        case 405:
+          kind = "not-implemented";
+          break;
+        case 413:
+          kind = "too-large";
+          break;
+        case 415:
+          kind = "unsupported-type";
+          break;
+        case 422:
+          // A 422 means the scanner found something — EXCEPT that FastAPI
+          // spends the same status on request validation, and answers it with
+          // a LIST of {loc, msg, type} rather than a problem document. Telling
+          // someone that a scanner objected to their payslip when in fact the
+          // form was malformed would be a false accusation dressed as a
+          // security finding, so the body's shape decides which 422 this is.
+          kind = Array.isArray(problem.detail) ? "bad-response" : "scan-flagged";
+          break;
+        case 503:
+          // The fail-closed answer. A 503 from a proxy in front of the API
+          // would land here too, but both readings agree on the part that
+          // matters and that the copy leads with: nothing was stored.
+          kind = "no-scanner";
+          break;
+        default:
+          kind = xhr.status >= 500 ? "server" : "bad-response";
+      }
+
+      finish({
+        ok: false,
+        kind,
+        status: xhr.status,
+        // The server's own words are carried when it wrote any, because 413
+        // names the limit and 422 names the finding, and the canned copy names
+        // neither. They are marked as the server's so the console can quote
+        // them as a quotation and keep its own sentence — the one that says
+        // what became of the file — in front of them.
+        message: said || UPLOAD_FAILURE_COPY[kind],
+        messageSource: said ? "api" : "console",
+        correlationId: correlationId ?? undefined,
+      });
+    };
+
+    xhr.send(form);
+  });
+}
+
 // --- Methods --------------------------------------------------------------
 
 export const api = {
@@ -520,6 +894,13 @@ export const api = {
 
   mcpSurface: (token: string | null, signal?: AbortSignal) =>
     request<McpSurfaceOut>("/v1/mcp/tools", { token, signal }),
+
+  /**
+   * The one call in this client that does not go through `request()`, because
+   * a multipart body and a real byte count are both outside what it can do.
+   * See `uploadDocument` above for why.
+   */
+  uploadDocument,
 
   listApplications: (
     token: string | null,

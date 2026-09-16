@@ -91,6 +91,27 @@ class Settings(BaseSettings):
     blob_key: str = "minioadmin"
     blob_secret: str = "minioadmin"
     blob_bucket: str = "gravai-documents"
+    #: Signature Version 4 signs a region even where the store has no regions.
+    #: MinIO accepts this one, and a real S3 bucket must be told its own.
+    blob_region: str = "us-east-1"
+    blob_timeout_seconds: float = 30.0
+
+    # --- Document upload --------------------------------------------------
+    #: The largest file the upload endpoint will accept. Enforced while reading
+    #: the part, so an oversize body is refused rather than buffered whole.
+    document_upload_max_bytes: int = 20 * 1024 * 1024
+    #: The clamd instance that scans every upload. Empty means no scanner, and
+    #: no scanner means uploads are refused with 503 — the platform never
+    #: accepts a file it could not scan. There is deliberately no setting that
+    #: disables scanning: an off switch is how a deployment ends up storing
+    #: unscanned files while still believing it scans them.
+    #:
+    #: This is not enforced at start-up the way OIDC_JWKS_URL is in production,
+    #: because refusing to boot would take down every endpoint over a
+    #: capability most requests never touch. The refusal belongs on the upload.
+    clamav_host: str = ""
+    clamav_port: int = 3310
+    clamav_timeout_seconds: float = 30.0
 
     # --- Auth -------------------------------------------------------------
     auth_dev_secret: str = "change-me-local-only"

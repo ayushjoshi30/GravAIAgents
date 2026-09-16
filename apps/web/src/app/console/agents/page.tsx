@@ -19,8 +19,9 @@
  */
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ConsolePage } from "@/components/console/ConsoleShell";
+import { DocumentUpload } from "@/components/console/DocumentUpload";
 import { AgentPipeline } from "@/components/agents/AgentPipeline";
 import { AgentIcon, Icon } from "@/components/icons/AgentIcon";
 import { Badge, Tag, TierBadge } from "@/components/ui/Badge";
@@ -32,6 +33,7 @@ import {
   type AgentInputField,
   type AgentInputsOut,
   type AgentRunResult,
+  type DocumentUploadOut,
   type SourceReport,
 } from "@/lib/api";
 import { formatInr } from "@/lib/format";
@@ -256,7 +258,9 @@ function SourceControls({
   onCheck: () => void;
 }) {
   return (
-    <div className="mb-5 rounded-lg border border-line bg-sunken p-4">
+    // The outer margin used to live here. It moved to `WaysIn`, which now owns
+    // the spacing for both halves so that neither can drift away from the other.
+    <div className="rounded-lg border border-line bg-sunken p-4">
       <h4 className="text-[12.5px] font-semibold text-ink">Data source</h4>
       <p className="mt-1 mb-3 text-[12.5px] leading-relaxed text-ink-2">
         A <code className="font-mono">GET</code> endpoint of yours. Return statement lines
@@ -295,6 +299,39 @@ function SourceControls({
       </div>
 
       {check.status === "ok" ? <SourcePanel report={check.report} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The two ways a document gets in, side by side.
+ *
+ * They are laid out as equal halves of one grid rather than stacked, because
+ * stacking would make whichever came second read as the fallback. Neither is:
+ * a tenant that already runs a document service should keep pointing runs at
+ * it — no key, no upload, no copy of the file anywhere — and a tenant that has
+ * no such service needs somewhere to put a file. The heading says "or" for the
+ * same reason.
+ */
+function WaysIn({
+  source,
+  upload,
+}: {
+  source: ReactNode;
+  upload: ReactNode;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h4 className="text-[12.5px] font-semibold text-ink">Where the documents come from</h4>
+        <span className="text-[11.5px] text-ink-3">
+          point the run at a service of yours, or hand it a file — either one, not both
+        </span>
+      </div>
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        {source}
+        {upload}
+      </div>
     </div>
   );
 }
@@ -419,6 +456,9 @@ function AgentRunCard({
   onSourceHeader,
   check,
   onCheck,
+  token,
+  documents,
+  onDocumentStored,
 }: {
   agent: Agent;
   open: boolean;
@@ -436,6 +476,9 @@ function AgentRunCard({
   onSourceHeader: (next: string) => void;
   check: CheckState;
   onCheck: () => void;
+  token: string | null;
+  documents: DocumentUploadOut[];
+  onDocumentStored: (document: DocumentUploadOut) => void;
 }) {
   const running = state.status === "running";
   const fields = spec?.status === "ready" ? spec.spec.fields : [];
@@ -522,13 +565,24 @@ function AgentRunCard({
 
           {spec?.status === "ready" ? (
             <>
-              <SourceControls
-                url={sourceUrl}
-                headerValue={sourceHeader}
-                onUrl={onSourceUrl}
-                onHeader={onSourceHeader}
-                check={check}
-                onCheck={onCheck}
+              <WaysIn
+                source={
+                  <SourceControls
+                    url={sourceUrl}
+                    headerValue={sourceHeader}
+                    onUrl={onSourceUrl}
+                    onHeader={onSourceHeader}
+                    check={check}
+                    onCheck={onCheck}
+                  />
+                }
+                upload={
+                  <DocumentUpload
+                    token={token}
+                    stored={documents}
+                    onStored={onDocumentStored}
+                  />
+                }
               />
 
               {fields.length > 0 ? (
@@ -593,6 +647,20 @@ export default function ConsoleAgentsPage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceHeader, setSourceHeader] = useState("");
   const [check, setCheck] = useState<CheckState>(NO_CHECK);
+
+  // Uploaded documents are held for the page, not for the card that happened to
+  // be open when the upload finished. Cards close when another opens, and a
+  // document id that vanished because someone looked at a second agent would be
+  // lost for good — the console has no way to list documents back.
+  const [documents, setDocuments] = useState<DocumentUploadOut[]>([]);
+
+  const recordDocument = useCallback((document: DocumentUploadOut) => {
+    setDocuments((previous) =>
+      previous.some((existing) => existing.document_id === document.document_id)
+        ? previous
+        : [document, ...previous],
+    );
+  }, []);
 
   const sourceBody = useCallback(() => {
     const url = sourceUrl.trim();
@@ -728,13 +796,14 @@ export default function ConsoleAgentsPage() {
         catalog the API and the MCP surface read — <span className="text-teal-ink">teal is the
         language model thinking</span>, navy is deterministic code, and the split is the point:
         a probability comes from a versioned scorecard and only the sentence around it comes
-        from a model. Point a run at a <strong>data source</strong> — a GET endpoint of yours
-        returning statement lines and application fields as JSON — and the figures that come
-        back are real answers about your data, with no document-AI key involved. The fields on
-        each card are <strong>overrides</strong>, not inputs: most have a real source, and
-        leaving one blank reads it from there rather than substituting a constant. There is no
-        file upload because the sandbox reader returns a fixed extraction per document type and
-        never opens the file.{" "}
+        from a model. A document gets in one of two ways, and setting up a run shows both: point
+        a run at a <strong>data source</strong> — a GET endpoint of yours returning statement
+        lines and application fields as JSON — and the figures that come back are real answers
+        about your data with no document-AI key involved; or <strong>upload a file</strong>,
+        which is scanned before anything is kept and refused outright if no scanner can be
+        reached. The fields on each card are <strong>overrides</strong>, not inputs: most have a
+        real source, and leaving one blank reads it from there rather than substituting a
+        constant.{" "}
         {ranCount > 0 ? `${ranCount} run so far this session.` : ""}
       </p>
 
@@ -773,6 +842,9 @@ export default function ConsoleAgentsPage() {
                   onSourceHeader={setSourceHeader}
                   check={check}
                   onCheck={() => void runCheck()}
+                  token={token}
+                  documents={documents}
+                  onDocumentStored={recordDocument}
                 />
               ))}
             </ul>

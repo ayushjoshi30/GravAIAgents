@@ -24,7 +24,20 @@ os.environ["AUTH_DEV_SECRET"] = "gravai-test-secret-not-for-production-32b"
 os.environ["OIDC_JWKS_URL"] = ""
 os.environ["OIDC_ISSUER"] = ""
 os.environ["OIDC_AUDIENCE"] = "gravai"
+# Sandbox is pinned here, explicitly, rather than being inferred.
+#
+# Settings force sandbox when no key is present, and this file clears the key —
+# which looks like enough and is not. An env var set to the empty string does
+# not reliably shadow a value in `.env`, so once a developer put a real
+# SARVAM_API_KEY and SARVAM_SANDBOX=0 in their own `.env`, the suite picked both
+# up and started making live, billed calls to api.sarvam.ai. Four MCP tests
+# failed with provider errors, which is the polite version of the failure; the
+# rude version is a test run that passes and quietly costs money.
+#
+# A test suite must never be able to reach a paid API because of what is in
+# somebody's local environment, so the flag is set here and not merely implied.
 os.environ["SARVAM_API_KEY"] = ""
+os.environ["SARVAM_SANDBOX"] = "1"
 os.environ["LOG_LEVEL"] = "WARNING"
 
 from gravai_core.db import get_engine, get_sessionmaker  # noqa: E402
