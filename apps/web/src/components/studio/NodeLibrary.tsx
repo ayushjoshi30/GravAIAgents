@@ -35,7 +35,19 @@ function LibraryItem({ spec, onAdd }: { spec: StudioNodeSpec; onAdd: (type: stri
         }}
         onClick={() => onAdd(spec.type)}
         title={spec.caveat ? `${spec.summary}\n\n${spec.caveat}` : spec.summary}
-        className="group flex w-full cursor-grab items-center gap-2 rounded-lg border border-transparent px-2 py-[7px] text-left transition-colors hover:border-line hover:bg-surface-2 active:cursor-grabbing"
+        /* A visible edge at rest, not only on hover.
+           
+           The rows were borderless until the pointer was on them, which
+           made thirty-one of them read as one undifferentiated column of
+           text and gave no hint that each is a separate thing you can pick
+           up and drop. A resting border says "these are objects" before
+           anyone touches them, which is the whole proposition of a palette.
+           
+           Hover and focus then have somewhere to go: the edge darkens to
+           the brand line and the surface lifts to white, so the feedback is
+           a change of state rather than the sudden appearance of a border
+           that was never there. */
+        className="group flex w-full cursor-grab items-center gap-2 rounded-[7px] border border-line-2 bg-surface px-2 py-[7px] text-left transition-colors hover:border-navy-line hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-navy active:cursor-grabbing"
       >
         {/* A node the API offers but this build's generated catalog has not
             heard of gets the palette's neutral slate and its own initial, the
@@ -133,7 +145,7 @@ export function NodeLibrary({
                 </span>
               </button>
               {!isCollapsed ? (
-                <ul className="space-y-0.5 pb-1">
+                <ul className="space-y-1 pb-1.5">
                   {family.nodes.map((spec) => (
                     <LibraryItem key={spec.type} spec={spec} onAdd={onAdd} />
                   ))}
