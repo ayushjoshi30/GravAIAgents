@@ -332,7 +332,7 @@ function StudioNodeImpl({ data, selected }: NodeProps) {
       // The card's edge carries the node's own hue, as the reference does.
       //
       // The icon plate alone was doing all the colour work, which is a 26px
-      // square on a 168px card: enough to tell you what a node is once you are
+      // square on a 180px card: enough to tell you what a node is once you are
       // reading it, not enough to tell you from across a graph of fifteen. The
       // border is the largest thing on a card that can be tinted without
       // turning the card itself into a colour field and making the text on it
@@ -346,7 +346,7 @@ function StudioNodeImpl({ data, selected }: NodeProps) {
       // in gravai-theme.css for why the difference matters. In short, a utility
       // would outrank the failed and selected states and paint over them.
       style={{ ...hueStyle(hueOf(node.type)), "--node-edge": "var(--plate-border)" } as CSSProperties}
-      className={`gv-node w-[168px] box-border select-none ${state} ${
+      className={`gv-node w-[180px] box-border select-none ${state} ${
         node.trace?.status === "skipped" ? "gv-node-skipped" : ""
       }`}
       data-node-type={node.type}
