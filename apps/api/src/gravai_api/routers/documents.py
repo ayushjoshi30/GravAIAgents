@@ -21,6 +21,12 @@ for local development or for making a test pass.
 What comes back is a ``blob://`` reference, never a URL. ``DocumentRef`` says
 its ``uri`` is "a reference the platform resolves itself ... it is never sent
 to the provider", and ``gravai_core.blobstore`` is what resolves it.
+
+An accepted upload also writes a ``Document`` row, and that row is what makes
+the returned id mean anything: before it existed the id resolved to nothing and
+the console's upload panel had to say so. It is written from what the store
+returned rather than from what the store was asked to write, and only after the
+write — the comment at that point says why the order is not a matter of taste.
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from gravai_core.auth import Scope
 from gravai_core.blobstore import BlobStore, S3BlobStore, extension_for
 from gravai_core.errors import ContentTooLong, GravAIError, ValidationFailed
-from gravai_core.models import Application
+from gravai_core.models import Application, Document
 from gravai_core.repositories import AuditRepository, get_or_404
 from gravai_core.settings import get_settings
 from gravai_core.telemetry import get_logger
@@ -117,7 +123,12 @@ class InfectedUpload(ValidationFailed):
 class DocumentOut(BaseModel):
     """An accepted document, as the console and the agents see it."""
 
-    document_id: str
+    document_id: str = Field(
+        description=(
+            "Send this as document_ids to POST /v1/agents/{agent_id}/run to have an agent "
+            "read the file. It resolves only for the tenant that uploaded it."
+        )
+    )
     uri: str = Field(
         description=(
             "A blob reference the platform resolves itself. Never a URL, and never "
@@ -304,7 +315,7 @@ async def upload_document(
             stored=False,
         )
 
-    document_id = str(uuid4())
+    document_id = uuid4()
     # A part can arrive with no filename at all. The fallback is generated and
     # says so, rather than inventing a plausible-looking name for a file whose
     # real one we were never told.
@@ -314,21 +325,47 @@ async def upload_document(
     # non-PDF has no page count at all.
     pages = count_pages(content)
 
-    # Stored before it is audited, because an audit entry names the uri and the
-    # digest, and neither exists until the write has happened. If the audit
-    # write then fails the transaction rolls back and the object is orphaned in
-    # the bucket — a scanned, clean object nothing refers to, which is the safer
-    # of the two ways to be inconsistent.
+    # Stored before it is recorded, because both the row and the audit entry
+    # name the uri and the digest, and neither exists until the write has
+    # happened. If a later write then fails the transaction rolls back and the
+    # object is orphaned in the bucket — a scanned, clean object nothing refers
+    # to, which is the safer of the two ways to be inconsistent.
     stored = await store.put(
         content,
         content_type=media_type,
         prefix=f"documents/{principal.tenant_id}",
     )
 
+    # The row is written after the object, and that order is the whole of the
+    # guarantee a document id carries. A row written first would assert that a
+    # document exists before any bytes had landed anywhere; if the store then
+    # refused the write, the assertion would be the only thing left, and a run
+    # naming that id would resolve a reference to nothing. Writing it here means
+    # every field is a fact about a write that has already succeeded, and the
+    # only inconsistency still available is an object nobody refers to — which
+    # costs a little storage and misleads no one.
+    session.add(
+        Document(
+            id=document_id,
+            tenant_id=principal.tenant_id,
+            application_id=application.id if application else None,
+            uri=stored.uri,
+            mime_type=media_type,
+            filename=filename,
+            size_bytes=stored.size_bytes,
+            pages=pages,
+            sha256=stored.sha256,
+        )
+    )
+    # Flushed here so a refused insert surfaces as this statement failing rather
+    # than as the audit append failing several lines below, which is where the
+    # next flush would otherwise send it.
+    await session.flush()
+
     await AuditRepository(session).append(
         action=DOCUMENT_UPLOADED,
         entity_type="document",
-        entity_id=document_id,
+        entity_id=str(document_id),
         payload={
             "filename": filename,
             "mime_type": media_type,
@@ -347,14 +384,14 @@ async def upload_document(
 
     log.info(
         "document_uploaded",
-        document_id=document_id,
+        document_id=str(document_id),
         mime_type=media_type,
         bytes=stored.size_bytes,
         pages=pages,
     )
 
     return DocumentOut(
-        document_id=document_id,
+        document_id=str(document_id),
         uri=stored.uri,
         mime_type=media_type,
         filename=filename,

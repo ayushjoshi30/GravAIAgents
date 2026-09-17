@@ -6,23 +6,34 @@ surfaces can never disagree about which agents exist.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 from gravai_agents import AgentTier, get_agent, list_agents
+from gravai_connectors.document_source import (
+    ParsedSource,
+    SourceDocument,
+    SourceUnusable,
+    fetch_source,
+)
 from gravai_core.auth import Scope
-from gravai_core.errors import ValidationFailed
+from gravai_core.blobstore import BlobStore, BlobStoreError
+from gravai_core.errors import NotFound, ValidationFailed
+from gravai_core.models import Document
 from gravai_core.netguard import UnsafeUrl
-from gravai_core.settings import get_settings
-from gravai_connectors.document_source import ParsedSource, SourceUnusable, fetch_source
+from gravai_core.repositories import get_or_404
 from gravai_core.runs import persist_run
+from gravai_core.settings import get_settings
 from gravai_runner import AgentNotRunnable, run_agent
 from gravai_runner.inputs import inputs_for
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..deps import CurrentPrincipal, DbSession, Sarvam, require_scope
+from .documents import BlobStoreDep
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -164,10 +175,22 @@ class AgentRunIn(BaseModel):
 
     An omitted input is not a default — it is left to whatever supplies it,
     which is `source` when one is given and the connected environment otherwise.
+
+    `source` and `document_ids` are not alternatives. A file someone had in
+    their hand and an endpoint holding the same applicant's figures are both
+    real, and a run may carry either or both.
     """
 
     inputs: dict[str, Any] = Field(default_factory=dict)
     source: DocumentSourceIn | None = None
+    document_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ids returned by POST /v1/documents. Each is resolved against your own "
+            "tenant: an id that is not yours answers exactly as one that does not "
+            "exist does."
+        ),
+    )
 
 
 class SourceReportOut(BaseModel):
@@ -224,6 +247,120 @@ async def _fetch(source: DocumentSourceIn) -> ParsedSource:
         raise ValidationFailed(str(exc), url=source.url) from exc
 
 
+async def _resolve_documents(
+    session: AsyncSession,
+    store: BlobStore,
+    tenant_id: UUID,
+    document_ids: list[str],
+) -> tuple[SourceDocument, ...]:
+    """Turn uploaded ids into documents, each checked against the tenant first.
+
+    Every id is looked up with the caller's own tenant in the WHERE clause, and
+    that predicate is the security property of this endpoint. A document id is a
+    bearer of nothing — holding one says nothing whatever about being allowed to
+    read what it names — and one lender reading another's bureau report is worse
+    than any outage this platform could have, because it is a breach the lender
+    has to report. The blob keys are random and tenant-prefixed, which is worth
+    having and is not the check: an attacker never sees a key, only an id, so it
+    is the id that has to be refused.
+
+    An id belonging to another tenant and an id belonging to nobody produce the
+    same 404 with the same body, because answering the two differently would
+    turn this endpoint into a way to ask which ids are real. A string that is not
+    a UUID is answered the same way for the same reason: one question, one
+    answer, whatever was sent.
+    """
+    resolved: list[SourceDocument] = []
+    seen: set[UUID] = set()
+
+    for raw in document_ids:
+        try:
+            document_id = UUID(raw)
+        except ValueError as exc:
+            raise NotFound("Document not found", entity_id=raw) from exc
+
+        # Deduplicated on the parsed id and not on the string that carried it,
+        # with the first occurrence winning, so the caller's order is the order
+        # the documents reach the run. Comparing the strings would have missed
+        # every respelling ``UUID()`` accepts — the urn form, the braced form,
+        # any mixture of case — and four spellings of one id would then have
+        # been four reads out of storage and the same file handed to the agent
+        # four times, as though four documents had been sent.
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+
+        # The tenant is passed explicitly rather than left to the ambient
+        # request context. It is the same value either way, and this is the one
+        # line in the file where a reader needs to see the check rather than
+        # trust that something upstream bound it.
+        row = await get_or_404(session, Document, document_id, tenant_id=tenant_id)
+
+        # Resolved through the blob store, which refuses any reference that is
+        # not ``blob://`` — so a stored row can never send the server off to
+        # fetch a URL. A store that cannot be reached raises BlobStoreError,
+        # which is a 502: a storage outage must not be dressed up as "no such
+        # document", both because it is not true and because it would send the
+        # reader looking for a bad id instead of a broken bucket.
+        content = await store.resolve(row.uri)
+        if not content:
+            # The upload refuses an empty file, so no row can honestly describe
+            # zero bytes. Nothing to read means the object is not the object
+            # that was stored, and an agent handed an empty document would
+            # report on a file it never saw.
+            raise BlobStoreError(
+                "The object store returned no bytes for this document",
+                document_id=str(row.id),
+            )
+
+        resolved.append(
+            SourceDocument(
+                document_id=str(row.id),
+                # ``declared_type`` is what a source endpoint said a document
+                # was. An upload carries no such claim, and inventing one here
+                # would make this router the origin of a fact nobody stated.
+                declared_type=None,
+                mime_type=row.mime_type,
+                filename=row.filename,
+                content=content,
+                pages=row.pages,
+            )
+        )
+
+    return tuple(resolved)
+
+
+def _uploads_note(uploaded: tuple[SourceDocument, ...]) -> str:
+    """What the source report says about documents that came from an upload."""
+    return (
+        f"{len(uploaded)} uploaded document{'' if len(uploaded) == 1 else 's'} "
+        "resolved from storage and added to this run"
+    )
+
+
+def _merge(
+    fetched: ParsedSource | None, uploaded: tuple[SourceDocument, ...]
+) -> ParsedSource | None:
+    """One ParsedSource carrying the fetched source and the uploads together.
+
+    When both are present neither replaces the other: the fetched documents keep
+    their place at the front, the uploads are appended after them, and
+    everything else the fetch produced — the statement lines, the application
+    fields, the account, the parser's notes — is left exactly as it was.
+    Discarding either would have the run quietly answer a question nobody asked:
+    the one without the file, or the one without the figures.
+    """
+    if not uploaded:
+        return fetched
+    if fetched is None:
+        return ParsedSource(documents=uploaded, notes=(_uploads_note(uploaded),))
+    return replace(
+        fetched,
+        documents=(*fetched.documents, *uploaded),
+        notes=(*fetched.notes, _uploads_note(uploaded)),
+    )
+
+
 @router.post(
     "/source/check",
     response_model=SourceReportOut,
@@ -274,6 +411,7 @@ async def run_one(
     session: DbSession,
     principal: CurrentPrincipal,
     sarvam: Sarvam,
+    store: BlobStoreDep,
     body: AgentRunIn | None = None,
 ) -> AgentRunOut:
     """Execute a single agent and record the run.
@@ -290,10 +428,34 @@ async def run_one(
     Supplied inputs are validated against the agent's declared schema. An
     unknown field is refused rather than dropped: a value the caller believes
     was applied and was not is the worst outcome available here.
+
+    `document_ids` name files this tenant uploaded earlier, and they are
+    resolved — scope checked, tenant checked, bytes read — before the agent is
+    asked to do anything. A run therefore either has every document it named or
+    does not happen at all: an agent reporting on a file it could not read would
+    be worse than a request that failed, and it would cost a model call to say
+    so.
     """
     spec = get_agent(agent_id)
     supplied = body.inputs if body else {}
-    parsed = await _fetch(body.source) if body and body.source else None
+
+    uploaded: tuple[SourceDocument, ...] = ()
+    if body and body.document_ids:
+        # Naming an uploaded document is reading it, so it costs what reading a
+        # document costs. `agents:run` on its own is held by roles this platform
+        # deliberately keeps away from files — a collections manager has it and
+        # holds neither documents:read nor documents:write — and without this
+        # line the new field would hand one of them a bureau report by way of an
+        # agent. Asked only when the field is used, so a caller that never sends
+        # one is answered exactly as it was before.
+        principal.require_scope(Scope.DOCUMENTS_READ)
+        # Resolved before the source is fetched, so an id that is not this
+        # tenant's is refused before the server makes any outbound request on
+        # the caller's behalf.
+        uploaded = await _resolve_documents(session, store, principal.tenant_id, body.document_ids)
+
+    fetched = await _fetch(body.source) if body and body.source else None
+    parsed = _merge(fetched, uploaded)
 
     try:
         result = await run_agent(agent_id, sarvam, inputs=supplied, source=parsed)
@@ -337,6 +499,12 @@ async def run_one(
             key: str(value) if isinstance(value, Decimal) else value
             for key, value in inputs_for(agent_id).resolve(supplied).items()
         },
-        source=_report(body.source.url, parsed) if body and body.source and parsed else None,
+        # The url is empty when the documents came from uploads alone: the report
+        # describes what this run actually read, and there was no URL to name.
+        # Either way the counts include the uploads, which is why the report is
+        # built from the merged source rather than from the fetch.
+        source=_report(body.source.url if body and body.source else "", parsed)
+        if parsed is not None
+        else None,
         output=result.output.model_dump(mode="json"),
     )

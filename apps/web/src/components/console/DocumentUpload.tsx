@@ -23,6 +23,17 @@
  * client call reports that transition for real (see `uploadDocument`), so this
  * can say "scanning" at the moment scanning actually begins rather than
  * guessing at it on a timer.
+ *
+ * WHAT BECOMES OF THE ID. It used to become nothing: the panel said so, because
+ * a run took overrides and a data source and there was nowhere to put a
+ * document id. `POST /v1/agents/{id}/run` now takes `document_ids`, so an
+ * upload attaches itself to the next run and the attached list below says what
+ * that run will carry. Two things are still true and are still said out loud.
+ * The attachment lives in this page's memory rather than in a document library,
+ * so a reload empties it while the document stays on the platform; and the
+ * attaching is a claim about the request and nothing more — only the counts the
+ * run reports back can say the document reached the run, and not even those say
+ * what the agent made of it.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from "react";
@@ -75,6 +86,17 @@ type UploadState =
  * chosen a file and has no idea whether it went anywhere.
  */
 type Reachability = { status: "checking" } | { status: "up" } | { status: "down" };
+
+/**
+ * How many documents the next run carries, said the way a person would.
+ *
+ * Module level so the attach and detach callbacks can use it without listing it
+ * as a dependency they would then have to keep honest.
+ */
+function carrying(count: number): string {
+  if (count === 0) return "Nothing is attached to the next run now.";
+  return `${count} document${count === 1 ? "" : "s"} now attached to the next run.`;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -175,10 +197,15 @@ function StoredDocument({
   document,
   copied,
   onCopy,
+  attached,
+  onAttach,
 }: {
   document: DocumentUploadOut;
   copied: "ok" | "failed" | null;
   onCopy: () => void;
+  /** Whether this id is in the set the next run will carry. */
+  attached: boolean;
+  onAttach: () => void;
 }) {
   const facts = [
     document.mime_type,
@@ -197,6 +224,11 @@ function StoredDocument({
         <Badge tone="neutral" icon={<Icon name="shield" size={12} />}>
           scanned by {document.scanned_by}
         </Badge>
+        {/* The badge states where the id is, not what any run has done with
+            it. "Attached" is a fact about the next request this page will
+            send; whether the document was read is a question only the run's
+            own report answers, and it is answered beside the result. */}
+        {attached ? <Badge tone="brand">attached to the next run</Badge> : null}
       </div>
 
       <p className="mt-2 text-[12.5px] leading-relaxed break-all text-ink-2">
@@ -210,6 +242,15 @@ function StoredDocument({
         <Button size="sm" variant="secondary" onClick={onCopy}>
           {copied === "ok" ? "Copied" : "Copy id"}
         </Button>
+        {/* Offered only when the id is not already attached, which happens
+            after someone removes it from the list below. A second "attach"
+            beside a document that is already attached would invite a press
+            that does nothing and reads as a failure. */}
+        {attached ? null : (
+          <Button size="sm" variant="secondary" onClick={onAttach}>
+            Attach to the next run
+          </Button>
+        )}
       </div>
 
       {copied === "failed" ? (
@@ -218,17 +259,23 @@ function StoredDocument({
         </p>
       ) : null}
 
-      {/* WHY THERE IS NO "USE IN THIS RUN" BUTTON. `POST /v1/agents/{id}/run`
-          accepts `inputs` and `source`, and no agent declares a field that
-          takes a document id — the runner rejects an input key it does not
-          know. A button that posted one anyway would fail on press, and one
-          that silently did nothing would be worse. The id is the handle, so
-          the console makes the id trivial to take rather than pretending to a
-          wiring the API has not grown yet. */}
+      {/* WHY THERE IS A BUTTON NOW, WHERE THERE USED NOT TO BE. This paragraph
+          used to end by saying that nothing attached the id to a run, which was
+          true: a run took `inputs` and `source` and the runner rejected any
+          input key it did not know, so a button here could only have failed on
+          press. `POST /v1/agents/{id}/run` has since grown `document_ids`, the
+          platform resolves each id against the caller's own tenant, and what it
+          finds reaches the runner as part of the same `source` the data-source
+          connector builds. The copy button stays regardless, because the id is
+          still the handle for anything this console cannot reach. */}
       <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-3">
-        The id is what identifies this document to anything that reads it. Nothing attaches it
-        to a run on its own: a run takes overrides and a data source, and no agent declares a
-        document field yet.
+        The id is what identifies this document to anything that reads it, and the run call now
+        carries it: the platform resolves the id against your own tenant and gives the run the
+        document, so nothing here has to be copied out by hand. Two limits are worth knowing.
+        The attachment is held by this page and not by the platform, so leaving or reloading
+        loses it while the document itself stays stored; and attaching is a fact about the
+        request only — the count the run reports back is what says the document reached the
+        run, and even that stops short of saying what the agent made of it.
       </p>
 
       <p className="mt-2 font-mono text-[11px] break-all text-ink-3">
@@ -242,16 +289,112 @@ function StoredDocument({
   );
 }
 
+/**
+ * What the next run will actually carry, before anyone starts one.
+ *
+ * This is a real list rather than a count, because a count cannot be argued
+ * with: someone who uploaded three files and sees "2 attached" has no way to
+ * find out which two. Each entry names its document and carries its own remove
+ * control, and the empty case is written out in full — leaving the section off
+ * when nothing is attached would make "did my last upload survive switching
+ * agents" a question this panel refuses to answer.
+ *
+ * Nothing here claims a document has been read. Everything on this list is a
+ * statement about the request the Run button is going to send.
+ */
+function AttachedDocuments({
+  attached,
+  reattachable,
+  onDetach,
+}: {
+  attached: DocumentUploadOut[];
+  /**
+   * How many documents are listed below and could be put back on.
+   *
+   * The empty state points at that list, and only when there is one. On a first
+   * visit there is nothing stored at all, and sending someone to look for a
+   * list that is not on the page is how a panel loses their trust over
+   * something small.
+   */
+  reattachable: number;
+  onDetach: (document: DocumentUploadOut) => void;
+}) {
+  return (
+    <div className="mt-4 border-t border-line pt-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="gv-eyebrow">Attached to the next run</p>
+        <span className="font-mono text-[11px] text-ink-3" data-numeric="">
+          {attached.length}
+        </span>
+      </div>
+
+      {attached.length === 0 ? (
+        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-3">
+          Nothing is attached, so a run started now carries no uploaded file at all. An upload
+          attaches itself here
+          {reattachable > 0
+            ? ", and anything stored earlier this session can be put back on from the list below"
+            : ""}
+          .
+        </p>
+      ) : (
+        <ul className="mt-1.5 space-y-1.5">
+          {attached.map((document) => (
+            <li key={document.document_id} className="flex flex-wrap items-center gap-2">
+              <span className="text-[11.5px] text-ink-2">{document.filename}</span>
+              <code className="font-mono text-[11px] break-all text-ink-3">
+                {document.document_id}
+              </code>
+              {/* The visible word is "Remove", which is all the column has room
+                  for and all a sighted reader needs beside the filename it sits
+                  next to. The accessible name names the document, because a
+                  list of buttons all called "Remove" is unusable to anyone
+                  tabbing through it out of context. */}
+              <button
+                type="button"
+                onClick={() => onDetach(document)}
+                aria-label={`Remove ${document.filename} from the next run`}
+                className="text-[11.5px] font-medium text-brand hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
+        This list is held in the page, not by the platform. A reload empties it, and this console
+        cannot ask for documents stored on an earlier visit — they still exist, but nothing here
+        can name them again unless their ids were written down.
+      </p>
+    </div>
+  );
+}
+
 export function DocumentUpload({
   token,
   stored,
   onStored,
+  attached,
+  onAttach,
+  onDetach,
   className,
 }: {
   token: string | null;
   /** Everything stored this session, so a document survives switching agents. */
   stored: DocumentUploadOut[];
   onStored: (document: DocumentUploadOut) => void;
+  /**
+   * The ids the next run will carry, in the order they were attached.
+   *
+   * Owned by the page rather than by this panel for the same reason `stored`
+   * is: the panel is mounted inside whichever agent card happens to be open,
+   * and closing that card must not silently empty a run's document set.
+   */
+  attached: DocumentUploadOut[];
+  onAttach: (document: DocumentUploadOut) => void;
+  onDetach: (documentId: string) => void;
   className?: string;
 }) {
   const inputId = useId();
@@ -270,12 +413,37 @@ export function DocumentUpload({
    */
   const attemptRef = useRef(0);
 
+  /**
+   * The attached set as it is right now, for callbacks that outlive a render.
+   *
+   * `send` is awaited across a whole upload, so the `attached` it closed over
+   * can be several removals out of date by the time the 201 lands. The list on
+   * screen re-renders from the prop and is never wrong; this exists so that the
+   * sentence the live region speaks — which is the only version of the list a
+   * screen-reader user is given at that moment — counts what is actually
+   * attached rather than what was attached a minute ago.
+   */
+  const attachedRef = useRef(attached);
+  useEffect(() => {
+    attachedRef.current = attached;
+  }, [attached]);
+
   const [state, setState] = useState<UploadState>({ status: "idle" });
   const [applicationId, setApplicationId] = useState("");
   const [dragging, setDragging] = useState(false);
   const [copied, setCopied] = useState<{ id: string; result: "ok" | "failed" } | null>(null);
   const [reach, setReach] = useState<Reachability>({ status: "checking" });
   const [probe, setProbe] = useState(0);
+  /**
+   * The last change to the attached set, in words, for the live region.
+   *
+   * The `seq` is not decoration. A live region announces nodes as they are
+   * inserted, so attaching a document, removing it and attaching it again
+   * would produce the same sentence in the same node and be announced once —
+   * the second attach passing in silence. Keying the node on `seq` replaces it
+   * each time, which is an insertion whatever the words say.
+   */
+  const [notice, setNotice] = useState<{ text: string; seq: number } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -311,6 +479,30 @@ export function DocumentUpload({
    */
   const busy = state.status === "uploading" || state.status === "scanning";
   const accepting = !blocked && !busy;
+
+  const attach = useCallback(
+    (document: DocumentUploadOut) => {
+      const already = attachedRef.current.some(
+        (existing) => existing.document_id === document.document_id,
+      );
+      if (already) return;
+      onAttach(document);
+      const text = `${document.filename} attached. ${carrying(attachedRef.current.length + 1)}`;
+      setNotice((previous) => ({ text, seq: (previous?.seq ?? 0) + 1 }));
+    },
+    [onAttach],
+  );
+
+  const detach = useCallback(
+    (document: DocumentUploadOut) => {
+      onDetach(document.document_id);
+      const text = `${document.filename} removed. ${carrying(
+        Math.max(0, attachedRef.current.length - 1),
+      )}`;
+      setNotice((previous) => ({ text, seq: (previous?.seq ?? 0) + 1 }));
+    },
+    [onDetach],
+  );
 
   const choose = useCallback((files: FileList | null, ignoredExtra = 0) => {
     const file = files?.[0];
@@ -406,6 +598,12 @@ export function DocumentUpload({
       // its id away here would strand a stored file that nothing can name again
       // — this console cannot list documents back.
       onStored(outcome.data);
+      // Attached for the same reason, and announced whether or not this panel
+      // is still showing the upload that produced it. A document that quietly
+      // joined the next run without saying so would be the one thing this panel
+      // must never do; the attached list and the announcement both name it, so
+      // a person who has moved on can see it and take it back off.
+      attach(outcome.data);
       if (attemptRef.current === attempt) setState({ status: "stored", document: outcome.data });
       return;
     }
@@ -435,7 +633,7 @@ export function DocumentUpload({
       httpStatus: outcome.status ?? null,
       correlationId: outcome.correlationId ?? null,
     });
-  }, [applicationId, onStored, state, token]);
+  }, [applicationId, attach, onStored, state, token]);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
@@ -460,6 +658,8 @@ export function DocumentUpload({
       state.status !== "stored" || document.document_id !== state.document.document_id,
   );
 
+  const attachedIds = new Set(attached.map((document) => document.document_id));
+
   return (
     <div className={`rounded-lg border border-line bg-sunken p-4 ${className ?? ""}`}>
       <h4 className="text-[12.5px] font-semibold text-ink">Upload a document</h4>
@@ -467,7 +667,8 @@ export function DocumentUpload({
         Send one file straight to the platform. It is virus-scanned before anything is kept, and
         a file that cannot be scanned is refused rather than stored — so a deployment with no
         scanner configured accepts no uploads at all. What comes back is a document id and a
-        blob reference the platform resolves itself.
+        blob reference the platform resolves itself, and the id is attached to the next run
+        started from this page.
       </p>
 
       {/* One region that is mounted from the first render and stays mounted,
@@ -569,9 +770,17 @@ export function DocumentUpload({
           stored-document block — filename, id, blob uri, the copy button, the
           paragraph explaining what a blob uri is — over the top of the one
           fact worth hearing. One sentence per phase is what is announced;
-          everything else below is there to be read at leisure. */}
+          everything else below is there to be read at leisure.
+
+          The attachment sentence is a SIBLING NODE rather than part of the
+          phase sentence. Only nodes that actually change are announced from a
+          region that is not atomic, so keeping them apart means removing a
+          document from the run does not re-read the upload's outcome, and an
+          upload's outcome does not re-read an attachment made five minutes
+          ago. */}
       <div role="status" aria-live="polite" className="sr-only">
-        {announcement(state)}
+        <p>{announcement(state)}</p>
+        {notice ? <p key={notice.seq}>{notice.text}</p> : null}
       </div>
 
       {state.status !== "idle" ? (
@@ -635,6 +844,8 @@ export function DocumentUpload({
               document={state.document}
               copied={copied !== null && copied.id === state.document.document_id ? copied.result : null}
               onCopy={() => void copyId(state.document.document_id)}
+              attached={attachedIds.has(state.document.document_id)}
+              onAttach={() => attach(state.document)}
             />
           ) : null}
         </div>
@@ -667,6 +878,13 @@ export function DocumentUpload({
         ) : null}
       </div>
 
+      {/* Rendered whether or not anything is attached. The empty case is the
+          one that has to be stated: someone who uploaded a file, opened a
+          second agent and came back needs to be told plainly that the run
+          carries nothing, rather than left to read an absent section either
+          way. */}
+      <AttachedDocuments attached={attached} reattachable={earlier.length} onDetach={detach} />
+
       {earlier.length > 0 ? (
         <div className="mt-4 border-t border-line pt-3">
           <p className="gv-eyebrow">Stored earlier this session</p>
@@ -677,15 +895,40 @@ export function DocumentUpload({
                   {document.document_id}
                 </code>
                 <span className="text-[11.5px] text-ink-3">{document.filename}</span>
+                {/* Named after its document for the same reason the attach and
+                    remove controls are. A column of buttons that all announce
+                    themselves as "Copy id" tells someone tabbing through this
+                    list nothing about which id they are about to take, and this
+                    list is exactly where that matters — the ids are the only
+                    thing distinguishing the rows. */}
                 <button
                   type="button"
                   onClick={() => void copyId(document.document_id)}
+                  aria-label={`Copy the id of ${document.filename}`}
                   className="text-[11.5px] font-medium text-brand hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                 >
                   {copied !== null && copied.id === document.document_id && copied.result === "ok"
                     ? "Copied"
                     : "Copy id"}
                 </button>
+                {/* Attaching is offered here so that a document from earlier in
+                    the session can go into a run without being re-uploaded.
+                    When it is already attached this says so in words rather
+                    than hiding the row: the attached list above is the place
+                    to take it back off, and two remove controls for one
+                    document would be two chances to press the wrong one. */}
+                {attachedIds.has(document.document_id) ? (
+                  <span className="text-[11.5px] text-ink-3">attached</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => attach(document)}
+                    aria-label={`Attach ${document.filename} to the next run`}
+                    className="text-[11.5px] font-medium text-brand hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  >
+                    Attach
+                  </button>
+                )}
               </li>
             ))}
           </ul>

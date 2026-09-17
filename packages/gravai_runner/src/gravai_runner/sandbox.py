@@ -53,6 +53,7 @@ from gravai_connectors import (
 )
 from gravai_connectors.account_aggregator import SandboxAccountAggregator
 from gravai_connectors.document_source import ParsedSource
+from gravai_connectors.models import GravitonDocument
 
 from .inputs import inputs_for
 
@@ -151,8 +152,41 @@ class SandboxFixtures:
         return record
 
     async def documents(self) -> Any:
+        """Read the documents in play, preferring the ones the caller supplied.
+
+        The source wins over the fixtures for the same reason it does for the
+        application record and the transactions above: it is the caller's real
+        data, and the fixtures exist only to stand in when there is none.
+
+        This used to list the sandbox application's documents unconditionally,
+        which meant a run carrying uploaded files still read the fixtures — the
+        uploads were resolved, passed in, and then quietly ignored in favour of
+        a demo applicant. A run that reports on documents the caller did not
+        send is worse than one that refuses: the output looks like an answer
+        about their file.
+        """
         if self._documents is None:
-            refs = await self.graviton.list_documents(DEFAULT_APPLICATION)
+            supplied = tuple(self.source.documents) if self.source else ()
+            refs = (
+                [
+                    GravitonDocument(
+                        document_id=doc.document_id,
+                        application_id=DEFAULT_APPLICATION,
+                        # An upload has no Graviton uri. The blob reference it
+                        # came from is deliberately not put here: it is resolved
+                        # already, and this field is what the reader would fetch
+                        # if the bytes were missing.
+                        uri=f"upload://{doc.document_id}",
+                        mime_type=doc.mime_type,
+                        pages=doc.pages,
+                        declared_type=doc.declared_type,
+                        content=doc.content,
+                    )
+                    for doc in supplied
+                ]
+                if supplied
+                else await self.graviton.list_documents(DEFAULT_APPLICATION)
+            )
             self._documents = await DocIntelligenceAgent(self.sarvam).run(self.ctx, documents=refs)
         return self._documents
 

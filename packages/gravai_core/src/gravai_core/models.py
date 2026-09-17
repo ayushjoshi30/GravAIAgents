@@ -227,6 +227,81 @@ class Application(Base, TimestampMixin, TenantScopedMixin):
         return f"<Application {self.external_id} {self.status}>"
 
 
+# --- Documents ------------------------------------------------------------
+
+
+class Document(Base, TenantScopedMixin):
+    """A file a tenant uploaded, and the only thing a document id resolves to.
+
+    The upload endpoint has always scanned a file, stored it and handed back an
+    id. Without this table that id named nothing: the bytes were in the bucket
+    and the audit log recorded that they had arrived, but an audit entry is a
+    record of what happened rather than somewhere to look one up, so nothing
+    could turn the id back into a document. This row is what makes the id
+    usable — a run names it and the platform resolves it here.
+
+    Tenant-scoped for the reason everything else in this file is, only more so.
+    A document id is a bearer of nothing: holding one says nothing about being
+    allowed to read what it names, so every path that resolves one filters on
+    the tenant. The blob keys are random and already carry the tenant in their
+    prefix; that is defence in depth, not the check. The check is the
+    ``tenant_id`` predicate in the query, because one lender reading another's
+    bureau report is the worst outcome this platform can produce.
+
+    No ``updated_at``. The row describes bytes that cannot change: the object is
+    written once, under a key nothing will ever be written to twice, and the
+    digest below is what proves the two still agree. A field implying the row
+    gets edited would be describing something that does not happen.
+    """
+
+    __tablename__ = "document"
+    __table_args__ = (
+        # Resolving an id is a primary-key lookup with a tenant predicate, and
+        # the primary key already serves it — there is no index to add for the
+        # query this table exists for. This one is for the other question that
+        # gets asked of it, "what did this applicant send us", which is the only
+        # lookup here that reads more than one row.
+        Index("ix_document_tenant_application", "tenant_id", "application_id"),
+    )
+
+    id: Mapped[UUID] = _uuid_pk()
+
+    #: Optional because a file can arrive before anyone has decided which
+    #: application it belongs to — the upload form offers the field and does not
+    #: require it. SET NULL rather than CASCADE: the object outlives the
+    #: application record, and a row that still resolves to real bytes is worth
+    #: more than no row at all.
+    application_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("application.id", ondelete="SET NULL"), nullable=True
+    )
+
+    #: A ``blob://bucket/key`` reference, never a URL. ``gravai_core.blobstore``
+    #: refuses anything else, which is what stops a stored row from becoming a
+    #: way to make the server fetch an address somebody chose.
+    uri: Mapped[str] = mapped_column(String(500), nullable=False)
+    #: Determined from the bytes at upload, not from what the client declared.
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Null for anything that is not a PDF, and for a PDF whose count could not
+    #: be read. The upload records what it counted and never a guess.
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: SHA-256 of the bytes that were scanned and stored, the same digest the
+    #: audit entry carries. It is what lets a later reader prove the object it
+    #: fetched is the object that was accepted.
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    #: When the object landed in the store. Named for the event rather than for
+    #: the row, like ``AuditLog.recorded_at``, because that moment is the fact
+    #: worth keeping: the row is only written once the write has happened.
+    stored_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Document {self.filename} {self.mime_type}>"
+
+
 # --- Audit ----------------------------------------------------------------
 
 
@@ -633,6 +708,7 @@ TENANT_SCOPED_TABLES: tuple[str, ...] = (
     "user_role",
     "api_key",
     "application",
+    "document",
     "audit_log",
     "agent_run",
     "agent_step",

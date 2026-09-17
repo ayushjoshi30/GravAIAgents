@@ -42,8 +42,31 @@ import { useToken } from "@/lib/session";
 type RunState =
   | { status: "idle" }
   | { status: "running" }
-  | { status: "done"; result: AgentRunResult }
-  | { status: "error"; message: string };
+  /**
+   * A finished run, plus what was sent with it.
+   *
+   * `attached` and `sourceSent` are a snapshot taken at the moment of the
+   * request, not a reading of the current page state. Someone can remove a
+   * document or clear the source URL while the result is still on screen, and a
+   * result panel that re-read the live state would quietly rewrite the history
+   * of a run that has already happened — telling a person their run carried one
+   * document when it carried three.
+   */
+  | {
+      status: "done";
+      result: AgentRunResult;
+      attached: DocumentUploadOut[];
+      sourceSent: boolean;
+    }
+  /**
+   * A run that produced nothing.
+   *
+   * The status is kept because the contract spends specific codes on documents
+   * — 404 for an id that is not yours or does not exist, 502 for a blob store
+   * that could not be reached — and a person who attached a file deserves to
+   * know which of those they are looking at.
+   */
+  | { status: "error"; message: string; httpStatus: number | null; documentsSent: number };
 
 type SpecState =
   | { status: "loading" }
@@ -218,19 +241,40 @@ function SourcePanel({ report }: { report: SourceReport }) {
             needs extraction
           </Badge>
         )}
-        <span className="ml-auto font-mono text-[11px] text-ink-3" data-numeric="">
-          {(report.bytes_fetched / 1024).toFixed(1)} kB
-        </span>
+        {/* The byte count is what was fetched over HTTP, and an upload was not
+            fetched over HTTP — the report comes back with nothing there. A
+            "0.0 kB" beside a nineteen-page document that was read perfectly
+            well would be a number contradicting the sentence under it. */}
+        {report.bytes_fetched > 0 ? (
+          <span className="ml-auto font-mono text-[11px] text-ink-3" data-numeric="">
+            {(report.bytes_fetched / 1024).toFixed(1)} kB
+          </span>
+        ) : null}
       </div>
 
+      {/* A run whose documents came from uploads has no URL to name — the
+          platform resolved them out of blob storage — and the report comes
+          back with that field empty. Printing "from ." there would read as a
+          rendering fault; naming a URL that was never fetched would be worse. */}
       <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-        Fetched {counts.join(", ") || "nothing usable"} from{" "}
-        <code className="font-mono break-all">{report.url}</code>.
+        {report.url ? (
+          <>
+            Fetched {counts.join(", ") || "nothing usable"} from{" "}
+            <code className="font-mono break-all">{report.url}</code>.
+          </>
+        ) : (
+          <>Read {counts.join(", ") || "nothing usable"}.</>
+        )}
       </p>
 
+      {/* The heading used to say "How your field names were read", which was
+          true of every note a fetch produced. The run's report now also carries
+          a note for documents that came from an upload, where no field name was
+          involved at all, so the heading says what the whole list is: how this
+          run came by what it read. */}
       {report.notes.length > 0 ? (
         <>
-          <p className="gv-eyebrow mt-2.5">How your field names were read</p>
+          <p className="gv-eyebrow mt-2.5">How this source was read</p>
           <ul className="mt-1 space-y-0.5 text-[11.5px] leading-relaxed text-ink-3">
             {report.notes.map((note) => (
               <li key={note}>· {note}</li>
@@ -312,6 +356,12 @@ function SourceControls({
  * it — no key, no upload, no copy of the file anywhere — and a tenant that has
  * no such service needs somewhere to put a file. The heading says "or" for the
  * same reason.
+ *
+ * "Either one, not both" used to end that heading, and it no longer does. A run
+ * now carries uploaded document ids alongside a source URL if both are set, and
+ * what comes back is a single document count covering the two together — which
+ * is why the result panel refuses to read that count as a verdict on the
+ * uploads when a URL went with them.
  */
 function WaysIn({
   source,
@@ -325,7 +375,8 @@ function WaysIn({
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
         <h4 className="text-[12.5px] font-semibold text-ink">Where the documents come from</h4>
         <span className="text-[11.5px] text-ink-3">
-          point the run at a service of yours, or hand it a file — either one, not both
+          point the run at a service of yours, or hand it a file — an upload goes into the run
+          as an id
         </span>
       </div>
       <div className="grid items-start gap-4 xl:grid-cols-2">
@@ -336,7 +387,134 @@ function WaysIn({
   );
 }
 
-function ResultPanel({ result }: { result: AgentRunResult }) {
+/**
+ * What the run's own report says about the documents that went with it.
+ *
+ * WHAT THE COUNT IS, AND WHAT IT IS NOT. `documents` is the size of the source
+ * the runner was handed, counted by the API after it resolved the ids out of
+ * storage. So it is evidence that the uploads reached the run — the thing that
+ * was impossible before `document_ids` existed — and it is not evidence that
+ * the agent quoted, extracted from or otherwise acted on them. The response
+ * carries no per-document outcome and no per-document ids, so the strongest
+ * true sentence available here is about what the run was given, and this block
+ * will not write a stronger one. An earlier draft of this panel said the count
+ * caught a file being "accepted and then ignored"; it cannot, and a reader who
+ * believed it would have taken a restatement of their own request for a finding
+ * about the agent.
+ *
+ * The list below says what was SENT and the sentence beside it says what the
+ * run's report counted. Nothing tries to pair the two up, because nothing in
+ * the response makes that pairing knowable.
+ *
+ * The shapes it can take:
+ *
+ *   - No source report at all. Nothing reached the run's source, so the ids
+ *     went nowhere — which is also what an API build that predates
+ *     `document_ids` looks like from here, because it ignores the field rather
+ *     than refusing it. Either way the documents were not read.
+ *   - A source URL went with the ids. The count is one number covering both,
+ *     and splitting it would be arithmetic on data that is not there.
+ *   - Ids alone. The count should equal what was sent, because the API resolves
+ *     every id or fails the whole run. The mismatch arms below are there for an
+ *     API that stops being true to that, not because either is expected today.
+ */
+function DocumentOutcome({
+  result,
+  attached,
+  sourceSent,
+}: {
+  result: AgentRunResult;
+  attached: DocumentUploadOut[];
+  sourceSent: boolean;
+}) {
+  if (attached.length === 0) return null;
+
+  const report = result.source;
+  const sent = attached.length;
+  const read = report?.documents ?? 0;
+  const withContent = report?.documents_with_content ?? 0;
+
+  // Tone is decided by whether the run accounted for what it was given, not by
+  // whether the run itself succeeded: an agent can clear every guardrail on a
+  // document set that is missing the file someone cared about.
+  const missing = report === null || (!sourceSent && read < sent);
+  const plate = missing
+    ? "border-fail-border bg-fail-soft text-fail"
+    : "border-line bg-sunken text-ink-2";
+
+  return (
+    <div className={`mt-3 rounded-lg border p-3 ${plate}`}>
+      <p className="text-[12.5px] leading-relaxed">
+        <strong className="font-medium">
+          {sent} uploaded document{sent === 1 ? "" : "s"} sent with this run.
+        </strong>{" "}
+        {report === null ? (
+          <>
+            The run reported no source at all, so nothing in its result says{" "}
+            {sent === 1 ? "this document was" : "these documents were"} read. Do not treat the
+            output as having taken {sent === 1 ? "it" : "them"} into account.
+          </>
+        ) : sourceSent ? (
+          <>
+            Its source report counts {read} document{read === 1 ? "" : "s"}, {withContent} with
+            content — but a data source was sent as well, and that count covers both. This
+            console cannot say how many of those {read} were{" "}
+            {sent === 1 ? "this upload" : "these uploads"}, and the count would not say what
+            the agent made of them if it could.
+          </>
+        ) : read < sent ? (
+          <>
+            It reported reading only {read} of them, {withContent} with content. The other{" "}
+            {sent - read} {sent - read === 1 ? "was" : "were"} not read — that gap is the signal
+            something was not readable, and the output cannot be relied on to cover{" "}
+            {sent - read === 1 ? "it" : "them"}.
+          </>
+        ) : read > sent ? (
+          <>
+            It reported reading {read} documents, {withContent} with content — more than were
+            sent from here, so the rest came from somewhere other than these uploads.
+          </>
+        ) : (
+          <>
+            Its source report counts {read} document{read === 1 ? "" : "s"}, {withContent} with
+            content, so {sent === 1 ? "it reached" : "they reached"} the run rather than only
+            the store. That is as far as the response goes — it says nothing about what the
+            agent did with {sent === 1 ? "it" : "them"}, so read the output below on its own
+            terms.
+            {withContent < read ? (
+              <>
+                {" "}
+                The {read - withContent} with no content reached the run as documents but
+                carried nothing for an agent to work from.
+              </>
+            ) : null}
+          </>
+        )}
+      </p>
+
+      <ul className="mt-2 space-y-1">
+        {attached.map((document) => (
+          <li key={document.document_id} className="flex flex-wrap items-baseline gap-2">
+            <span className="text-[11.5px]">{document.filename}</span>
+            <code className="font-mono text-[11px] break-all opacity-80">
+              {document.document_id}
+            </code>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ResultPanel({
+  result,
+  attached,
+  sourceSent,
+}: {
+  result: AgentRunResult;
+  attached: DocumentUploadOut[];
+  sourceSent: boolean;
+}) {
   const [showRaw, setShowRaw] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
   const used = Object.entries(result.overrides_applied ?? {});
@@ -365,6 +543,12 @@ function ResultPanel({ result }: { result: AgentRunResult }) {
           ))}
         </ul>
       ) : null}
+
+      {/* Above the agent's own words on purpose. Whether the file was read is
+          the question someone who attached one is holding while they read
+          everything else, and an answer further down the panel would be found
+          after the summary had already been believed. */}
+      <DocumentOutcome result={result} attached={attached} sourceSent={sourceSent} />
 
       {result.reasoning_summary ? (
         <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{result.reasoning_summary}</p>
@@ -459,6 +643,9 @@ function AgentRunCard({
   token,
   documents,
   onDocumentStored,
+  attachedDocuments,
+  onAttachDocument,
+  onDetachDocument,
 }: {
   agent: Agent;
   open: boolean;
@@ -479,6 +666,9 @@ function AgentRunCard({
   token: string | null;
   documents: DocumentUploadOut[];
   onDocumentStored: (document: DocumentUploadOut) => void;
+  attachedDocuments: DocumentUploadOut[];
+  onAttachDocument: (document: DocumentUploadOut) => void;
+  onDetachDocument: (documentId: string) => void;
 }) {
   const running = state.status === "running";
   const fields = spec?.status === "ready" ? spec.spec.fields : [];
@@ -581,6 +771,9 @@ function AgentRunCard({
                     token={token}
                     stored={documents}
                     onStored={onDocumentStored}
+                    attached={attachedDocuments}
+                    onAttach={onAttachDocument}
+                    onDetach={onDetachDocument}
                   />
                 }
               />
@@ -622,12 +815,48 @@ function AgentRunCard({
           ) : null}
 
           {state.status === "error" ? (
-            <p className="mt-4 rounded-lg border border-fail-border bg-fail-soft p-3 text-[12.5px] text-fail">
-              {state.message}
-            </p>
+            <div className="mt-4 rounded-lg border border-fail-border bg-fail-soft p-3 text-[12.5px] leading-relaxed text-fail">
+              <p>{state.message}</p>
+              {/* A failed run produced no result, so there is nothing that
+                  could say whether the documents were read — which is worth
+                  stating, because the attached list is still sitting on screen
+                  saying they went with it. The two status codes the document
+                  contract spends are named when they come up: a 404 is the one
+                  answer given both to an id that is not yours and to an id that
+                  does not exist, and the API deliberately does not tell the two
+                  apart. */}
+              {state.documentsSent > 0 ? (
+                <p className="mt-1.5">
+                  {state.documentsSent} document id{state.documentsSent === 1 ? "" : "s"} went
+                  with this run. It produced no result, so nothing here says whether{" "}
+                  {state.documentsSent === 1 ? "it was" : "any of them were"} read.
+                  {state.httpStatus === 404 ? (
+                    <>
+                      {" "}
+                      A 404 is also what an id answers when it does not exist or is not your
+                      tenant&apos;s — the API gives the same reply to both, so check the ids
+                      before reading anything more into it.
+                    </>
+                  ) : null}
+                  {state.httpStatus === 502 ? (
+                    <>
+                      {" "}
+                      A 502 here is the blob store being unreachable, so the documents could not
+                      be fetched. Nothing is wrong with the ids.
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
-          {state.status === "done" ? <ResultPanel result={state.result} /> : null}
+          {state.status === "done" ? (
+            <ResultPanel
+              result={state.result}
+              attached={state.attached}
+              sourceSent={state.sourceSent}
+            />
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -654,6 +883,22 @@ export default function ConsoleAgentsPage() {
   // lost for good — the console has no way to list documents back.
   const [documents, setDocuments] = useState<DocumentUploadOut[]>([]);
 
+  /**
+   * The ids the next run will carry, in the order they were attached.
+   *
+   * Ids rather than documents, because ids are what the request carries: a list
+   * of objects here would be a second copy of the truth, and the one that got
+   * out of step would be the one on screen. Anything attached is by definition
+   * something `documents` already holds, so the objects are looked back up
+   * rather than stored twice.
+   *
+   * This is memory, not a library. Nothing in the console can list a tenant's
+   * documents back, so a reload leaves the uploads on the platform and the ids
+   * unreachable from here — which the upload panel says in as many words rather
+   * than letting the list imply a permanence it does not have.
+   */
+  const [attachedIds, setAttachedIds] = useState<string[]>([]);
+
   const recordDocument = useCallback((document: DocumentUploadOut) => {
     setDocuments((previous) =>
       previous.some((existing) => existing.document_id === document.document_id)
@@ -661,6 +906,31 @@ export default function ConsoleAgentsPage() {
         : [document, ...previous],
     );
   }, []);
+
+  const attachDocument = useCallback((document: DocumentUploadOut) => {
+    setAttachedIds((previous) =>
+      previous.includes(document.document_id) ? previous : [...previous, document.document_id],
+    );
+  }, []);
+
+  const detachDocument = useCallback((documentId: string) => {
+    setAttachedIds((previous) => previous.filter((id) => id !== documentId));
+  }, []);
+
+  /**
+   * The attached ids resolved back to what was uploaded, for display.
+   *
+   * An id with no document behind it is dropped rather than rendered as a bare
+   * id: it cannot happen while `documents` only grows, and if it ever does, a
+   * row naming no file is not something a person can act on.
+   */
+  const attachedDocuments = useMemo(() => {
+    const byId = new Map(documents.map((document) => [document.document_id, document]));
+    return attachedIds.flatMap((id) => {
+      const document = byId.get(id);
+      return document ? [document] : [];
+    });
+  }, [attachedIds, documents]);
 
   const sourceBody = useCallback(() => {
     const url = sourceUrl.trim();
@@ -721,6 +991,8 @@ export default function ConsoleAgentsPage() {
           [agentId]: {
             status: "error",
             message: "No API token. Add one in Settings, then try again.",
+            httpStatus: null,
+            documentsSent: 0,
           },
         }));
         return;
@@ -730,19 +1002,37 @@ export default function ConsoleAgentsPage() {
       const fields = spec?.status === "ready" ? spec.spec.fields : [];
       const payload = toPayload(fields, drafts[agentId] ?? {});
 
+      // Frozen before the request goes out, and reported against afterwards.
+      // What the run carried is a fact about the request; reading it back off
+      // the page when the answer arrives would let a removal made while the
+      // agent was working rewrite what the run was given.
+      const sent = attachedDocuments;
+      const source = sourceBody();
+
       setBusy(true);
       setStates((prev) => ({ ...prev, [agentId]: { status: "running" } }));
 
-      const outcome = await api.runAgent(token, agentId, payload, sourceBody());
+      const outcome = await api.runAgent(
+        token,
+        agentId,
+        payload,
+        source,
+        sent.map((document) => document.document_id),
+      );
       setStates((prev) => ({
         ...prev,
         [agentId]: outcome.ok
-          ? { status: "done", result: outcome.data }
-          : { status: "error", message: outcome.message },
+          ? { status: "done", result: outcome.data, attached: sent, sourceSent: source !== null }
+          : {
+              status: "error",
+              message: outcome.message,
+              httpStatus: outcome.status ?? null,
+              documentsSent: sent.length,
+            },
       }));
       setBusy(false);
     },
-    [drafts, sourceBody, specs, token],
+    [attachedDocuments, drafts, sourceBody, specs, token],
   );
 
   const ranCount = useMemo(
@@ -800,10 +1090,14 @@ export default function ConsoleAgentsPage() {
         a run at a <strong>data source</strong> — a GET endpoint of yours returning statement
         lines and application fields as JSON — and the figures that come back are real answers
         about your data with no document-AI key involved; or <strong>upload a file</strong>,
-        which is scanned before anything is kept and refused outright if no scanner can be
-        reached. The fields on each card are <strong>overrides</strong>, not inputs: most have a
-        real source, and leaving one blank reads it from there rather than substituting a
-        constant.{" "}
+        which is scanned before anything is kept, refused outright if no scanner can be
+        reached, and then attached to the run by its id, which the platform resolves against
+        your own tenant. The result then counts what the run&apos;s source actually carried,
+        which is how you tell a file that reached the run from one that is only stored — it
+        stops there, and nothing in the response says what the agent made of it. The fields on
+        each card are{" "}
+        <strong>overrides</strong>, not inputs: most have a real source, and leaving one blank
+        reads it from there rather than substituting a constant.{" "}
         {ranCount > 0 ? `${ranCount} run so far this session.` : ""}
       </p>
 
@@ -845,6 +1139,9 @@ export default function ConsoleAgentsPage() {
                   token={token}
                   documents={documents}
                   onDocumentStored={recordDocument}
+                  attachedDocuments={attachedDocuments}
+                  onAttachDocument={attachDocument}
+                  onDetachDocument={detachDocument}
                 />
               ))}
             </ul>

@@ -66,6 +66,23 @@ class GravitonDocument(BaseModel):
     declared_type: str | None = None
     uploaded_at: date | None = None
 
+    #: The file itself, when the platform already has it.
+    #:
+    #: Graviton hands over a `uri` and nothing else, because its documents live
+    #: in its own storage — that is why this was uri-only. An upload is
+    #: different: by the time a run starts, the bytes have been scanned, stored
+    #: and read back out of the blob store, and they are right here.
+    #:
+    #: Without this field they had nowhere to go. `extra="forbid"` above means
+    #: they could not even be smuggled through, so a resolved upload arrived at
+    #: the document reader as a uri with no content, and the provider client
+    #: refused it: "Exactly one of file content and upload_id must be supplied".
+    #: The upload worked, the resolution worked, and the file still could not be
+    #: read.
+    #:
+    #: Optional because the Graviton path genuinely has no bytes to give.
+    content: bytes | None = None
+
 
 class GravitonApplication(BaseModel):
     """A loan application as Graviton holds it."""

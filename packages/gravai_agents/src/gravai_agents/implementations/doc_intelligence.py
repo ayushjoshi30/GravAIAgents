@@ -193,6 +193,12 @@ class DocIntelligenceAgent(Agent[DocIntelligenceOutput]):
                 mime_type=document.mime_type,
                 pages=document.pages,
                 doc_type=str(doc_type),
+                # Carried through when the platform already holds the file — an
+                # uploaded document arrives with its bytes attached. The
+                # provider takes either content or an upload id and refuses a
+                # ref that has neither, so dropping this here was the difference
+                # between a document that reads and one that 502s.
+                content=document.content,
             ),
             mode=mode,
             tenant_id=ctx.tenant_id,

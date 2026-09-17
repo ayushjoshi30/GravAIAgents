@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * The worked-example panel on an agent page, drawn as an execution timeline.
  *
@@ -15,8 +17,24 @@
  * Drawn entirely in markup, CSS and inline SVG from the shared icon set. The
  * product ships no raster assets, so there is nothing here that can 404 or
  * arrive at the wrong resolution.
+ *
+ * WHY THIS IS A CLIENT COMPONENT. The stages reveal in order as the reader
+ * scrolls down to them, which needs an IntersectionObserver and a check of the
+ * reader's motion preference — see `useSequencedReveal`. The markup the server
+ * renders is the finished panel with every stage at full strength, so the
+ * interactivity only ever subtracts, never adds.
+ *
+ * THE COLOUR HERE IS NOT THE AGENT'S. This panel takes no hue prop and must
+ * not grow one. Green, amber and rose inside it mean a run proceeded, a rule
+ * flagged risk and a run stopped — they are the record of what happened — and
+ * navy is the platform's own furniture. Three of the fourteen agents carry a
+ * generated hue that is one of those reserved three, so an agent colour washed
+ * through this panel would sit a decorative green beside a genuine one and
+ * quietly make both unreadable. The page frames this panel; it does not paint
+ * inside it.
  */
 
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons/AgentIcon";
 import type { AgentUseCase, FlowNode, FlowRow, FlowTone } from "@/lib/agent-usecase";
 
@@ -27,6 +45,18 @@ import type { AgentUseCase, FlowNode, FlowRow, FlowTone } from "@/lib/agent-usec
  * that manifest or it is not on the site.
  */
 const AVATAR_SRC: string | null = null;
+
+/**
+ * How far apart two stages land when they arrive in the same scroll step.
+ *
+ * Small on purpose. This is the gap that makes a sequence read as a sequence;
+ * anything longer and the reader is waiting on the page instead of reading it.
+ */
+const STAGGER_MS = 90;
+
+/** The card follows its own marker, and the spine leaves once the card has landed. */
+const CARD_OFFSET_MS = 70;
+const SPINE_OFFSET_MS = 150;
 
 const TONE_TEXT: Record<FlowTone, string> = {
   pass: "text-pass",
@@ -45,6 +75,191 @@ const TONE_WORD: Record<FlowTone, string | null> = {
   fail: "over limit",
   plain: null,
 };
+
+/**
+ * `useLayoutEffect` on the client, `useEffect` where there is no layout to
+ * measure.
+ *
+ * The arming step below hides stages that the server has already rendered
+ * visible, and it has to happen before the browser paints. Done in a plain
+ * effect the reader sees the finished panel, then sees it blanked, then sees it
+ * fade back in — a flash that looks like a bug and is one. React warns about
+ * `useLayoutEffect` during server rendering, where there is nothing to lay out,
+ * so the choice is made once at module scope rather than per render.
+ */
+const useArmingEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+interface Reveal {
+  /** True while stages are being held back — false means the panel is simply drawn. */
+  armed: boolean;
+  /** Whether this stage should be at full strength yet. */
+  shown: (index: number) => boolean;
+  /** How long this stage waits after its neighbours, in milliseconds. */
+  delay: (index: number) => number;
+  /** Ref callback that puts a stage under observation. */
+  register: (index: number) => (node: HTMLLIElement | null) => void;
+}
+
+/**
+ * Reveal the stages in order, as the reader arrives at them.
+ *
+ * THE MOTION IS THE MECHANISM. A run happens in a sequence, and this is the one
+ * panel on the page that is a record of a particular run, so the stages arrive
+ * in the order the work did: the marker lands, its card follows, and the spine
+ * then draws down toward the step that came next. Watching it answers "what
+ * happened, and in what order", which is the only question the panel exists to
+ * answer. It runs once per stage and stops — there is no loop, because a
+ * timeline that keeps replaying itself under someone trying to read a figure is
+ * decoration wearing the costume of an explanation, and on a credit product
+ * that reads as unserious.
+ *
+ * IT DEFAULTS TO REVEALED, AND ONLY ARMING HIDES ANYTHING. The server renders
+ * every stage at full strength and this hook hides them only once it has
+ * confirmed, in the browser, that it can both observe scrolling and honour the
+ * reader's motion preference. Written the other way round — hidden until an
+ * observer grants permission — the panel is silently blank forever anywhere the
+ * callback never arrives, and it does not arrive in every embedded browser.
+ * That failure has no error and nothing to debug, and it would hide the most
+ * credible content on the page.
+ *
+ * A REDUCED-MOTION PREFERENCE STOPS THIS RATHER THAN SLOWING IT. The hook never
+ * arms, so nothing is ever hidden and nothing ever transitions: what is left is
+ * the complete panel, not a faded one, and no information lives only in the
+ * animation. The preference is re-checked while the page is open, so a reader
+ * who turns it on mid-visit gets every remaining stage immediately rather than
+ * the ones below the fold staying invisible.
+ */
+function useSequencedReveal(count: number): Reveal {
+  const stages = useRef<(HTMLLIElement | null)[]>([]);
+  const [armed, setArmed] = useState(false);
+  const [state, setState] = useState<{ shown: boolean[]; delay: number[] }>(() => ({
+    shown: Array<boolean>(count).fill(false),
+    delay: Array<number>(count).fill(0),
+  }));
+
+  useArmingEffect(() => {
+    // Both guards are real. Static export runs this module with no `window`,
+    // and some embedded browsers ship a `window` with neither `matchMedia` nor
+    // `IntersectionObserver`. Failing either check leaves the panel drawn.
+    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") return;
+
+    const query =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
+    if (query?.matches) return;
+
+    setArmed(true);
+    if (!query) return;
+
+    // Disarming reveals everything, because `shown` is read as "not armed, or
+    // already arrived". Nothing has to be un-hidden one stage at a time.
+    const sync = () => {
+      if (query.matches) setArmed(false);
+    };
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!armed) return;
+
+    // Whether the observer has ever spoken. See the fallback below.
+    let heard = false;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        heard = true;
+        const arrived: HTMLElement[] = [];
+        for (const entry of entries) {
+          if (entry.isIntersecting) arrived.push(entry.target as HTMLElement);
+        }
+        if (arrived.length === 0) return;
+
+        // A stage arrives once. Unobserving here rather than tracking it in
+        // state is also what stops the panel re-hiding itself when the reader
+        // scrolls back up — a timeline that rewinds is entertainment.
+        for (const node of arrived) observer.unobserve(node);
+
+        // The index is read off the element rather than looked up in the ref
+        // array, because a ref callback briefly writes null on every re-render
+        // and a lookup that lands in that window would drop the stage silently.
+        const indices = arrived
+          .map((node) => Number(node.dataset.stage))
+          .filter((index) => Number.isInteger(index))
+          .sort((a, b) => a - b);
+
+        setState((previous) => {
+          const shown = previous.shown.slice();
+          const delay = previous.delay.slice();
+          // The stagger is counted within THIS batch, not from the top of the
+          // panel. On a tall screen the whole timeline can enter the viewport
+          // at once, and a delay derived from the absolute index would leave
+          // the last stage waiting on the first nine even though the reader is
+          // looking straight at it.
+          let position = 0;
+          for (const index of indices) {
+            if (shown[index]) continue;
+            shown[index] = true;
+            delay[index] = position * STAGGER_MS;
+            position += 1;
+          }
+          return { shown, delay };
+        });
+      },
+      // Held back from the viewport edge so a stage lands once it is properly
+      // on screen rather than resolving in the reader's periphery. The line is
+      // drawn with a margin and a zero threshold rather than by asking for a
+      // fraction of the element to be visible, because the outcome card is by
+      // far the tallest stage and on a short viewport a fractional threshold is
+      // a condition it can struggle to meet — which would leave the one stage
+      // that matters most as the one that never appears.
+      { rootMargin: "0px 0px -10% 0px", threshold: 0 },
+    );
+
+    for (const node of stages.current) {
+      if (node) observer.observe(node);
+    }
+
+    /* The one hole the checks above cannot close.
+     *
+     * Arming asks whether `IntersectionObserver` EXISTS, which is all a feature
+     * test can ask. A reveal, unlike the battery optimisation on the explainer
+     * card, needs the observer to actually deliver — so in an embedded browser
+     * that ships the constructor and never calls the callback, this panel would
+     * be hidden for good, with no error and nothing to debug, and it holds the
+     * most credible content on the page.
+     *
+     * A working observer always speaks once shortly after `observe`, whether or
+     * not anything is on screen, so silence here means the observer is not
+     * working rather than that the reader has not scrolled yet. Disarming draws
+     * the whole panel, which is the same complete picture a reduced-motion
+     * reader gets.
+     */
+    const fallback = window.setTimeout(() => {
+      if (!heard) setArmed(false);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(fallback);
+      observer.disconnect();
+    };
+  }, [armed, count]);
+
+  const register = useCallback(
+    (index: number) => (node: HTMLLIElement | null) => {
+      stages.current[index] = node;
+    },
+    [],
+  );
+
+  return {
+    armed,
+    shown: (index: number) => !armed || state.shown[index] === true,
+    delay: (index: number) => (armed ? (state.delay[index] ?? 0) : 0),
+    register,
+  };
+}
 
 function ToneMark({ tone }: { tone: FlowTone }) {
   const word = TONE_WORD[tone];
@@ -104,24 +319,36 @@ function splitVerdict(text: string): { word: string; qualifier: string } {
  * dashes by a mask so it reads as something travelling rather than a border.
  * The mask is alpha only — the black is a stencil, not a colour — and where a
  * browser ignores it the line simply renders solid.
+ *
+ * It draws itself downward once the stage above it has landed, which is the
+ * one piece of motion here that is genuinely about the run rather than about
+ * the reader: work leaving a finished step for the next one. `origin-top` is
+ * what makes it grow from the marker it left rather than meeting in the
+ * middle, and the chevron at its foot arrives with it.
  */
-function StageLine() {
+function StageLine({ visible, delay }: { visible: boolean; delay: number }) {
   return (
     <>
       <span
         aria-hidden="true"
-        className="mt-2 w-[2px] flex-1 rounded-full opacity-85 transition-opacity duration-200 ease-gv group-hover:opacity-100"
+        className={`mt-2 w-[2px] flex-1 origin-top rounded-full opacity-85 transition-[transform,opacity] duration-[320ms] ease-gv group-hover:opacity-100 ${
+          visible ? "scale-y-100" : "scale-y-0"
+        }`}
         style={{
           backgroundImage:
             "linear-gradient(180deg, var(--gv-brand) 0%, var(--gv-brand-300) 38%, var(--gv-brand-200) 70%, var(--gv-line) 100%)",
           maskImage: "repeating-linear-gradient(180deg, rgb(0 0 0) 0 6px, transparent 6px 10px)",
           WebkitMaskImage:
             "repeating-linear-gradient(180deg, rgb(0 0 0) 0 6px, transparent 6px 10px)",
+          transitionDelay: `${delay}ms`,
         }}
       />
       <span
         aria-hidden="true"
-        className="-mt-0.5 mb-1 flex text-brand-300 transition-colors duration-200 ease-gv group-hover:text-brand"
+        className={`-mt-0.5 mb-1 flex text-brand-300 transition-[color,opacity] duration-200 ease-gv group-hover:text-brand ${
+          visible ? "opacity-100" : "opacity-0"
+        }`}
+        style={{ transitionDelay: `${delay + 120}ms` }}
       >
         <Icon name="chevron" size={12} />
       </span>
@@ -134,16 +361,26 @@ function StageMarker({
   ordinal,
   kind,
   escalated,
+  visible,
+  delay,
 }: {
   ordinal: string;
   kind: FlowNode["kind"];
   escalated: boolean;
+  visible: boolean;
+  delay: number;
 }) {
+  // The marker is the thing that "lands", so it is the only part that scales.
+  const motion = `transition-[opacity,transform] duration-[280ms] ease-gv ${
+    visible ? "scale-100 opacity-100" : "scale-75 opacity-0"
+  }`;
+
   if (kind === "result") {
     return (
       <span
         aria-hidden="true"
-        className={`relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-white ring-4 ${
+        style={{ transitionDelay: `${delay}ms` }}
+        className={`relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-white ring-4 ${motion} ${
           escalated ? "bg-amber ring-amber-soft" : "bg-brand shadow-brand ring-pass-soft"
         }`}
       >
@@ -156,7 +393,8 @@ function StageMarker({
     <span
       aria-hidden="true"
       data-numeric=""
-      className={`relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-brand-200 font-mono text-[11px] font-semibold text-brand shadow-resting ${
+      style={{ transitionDelay: `${delay}ms` }}
+      className={`relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-brand-200 font-mono text-[11px] font-semibold text-brand shadow-resting ${motion} ${
         kind === "actor" ? "bg-brand-50" : "bg-surface"
       }`}
     >
@@ -346,6 +584,7 @@ function StageCard({
 export function UseCaseFlow({ useCase }: { useCase: AgentUseCase }) {
   const escalated = useCase.verdict.kind === "escalated";
   const status = splitVerdict(useCase.verdict.text);
+  const reveal = useSequencedReveal(useCase.nodes.length);
 
   // Steps are numbered among themselves, so the stage labels read as a
   // sequence of work rather than as a count of cards.
@@ -392,9 +631,14 @@ export function UseCaseFlow({ useCase }: { useCase: AgentUseCase }) {
                     ? "Outcome"
                     : `Step ${step} of ${stepTotal}`;
 
+              const visible = reveal.shown(index);
+              const delay = reveal.delay(index);
+
               return (
                 <li
                   key={`${node.kind}-${index}`}
+                  ref={reveal.register(index)}
+                  data-stage={index}
                   className="group grid grid-cols-[1.875rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4"
                 >
                   <div className="flex flex-col items-center">
@@ -402,11 +646,20 @@ export function UseCaseFlow({ useCase }: { useCase: AgentUseCase }) {
                       ordinal={String(index + 1).padStart(2, "0")}
                       kind={node.kind}
                       escalated={escalated}
+                      visible={visible}
+                      delay={delay}
                     />
-                    {isLast ? null : <StageLine />}
+                    {isLast ? null : (
+                      <StageLine visible={visible} delay={delay + SPINE_OFFSET_MS} />
+                    )}
                   </div>
 
-                  <div className={`min-w-0 ${isLast ? "" : "pb-6"}`}>
+                  <div
+                    className={`min-w-0 transition-[opacity,transform] duration-[360ms] ease-gv ${
+                      isLast ? "" : "pb-6"
+                    } ${visible ? "translate-y-0 opacity-100" : "translate-y-1.5 opacity-0"}`}
+                    style={{ transitionDelay: `${delay + CARD_OFFSET_MS}ms` }}
+                  >
                     <p className="flex min-h-[30px] items-center">
                       <span
                         className={`gv-eyebrow text-[11px] ${
@@ -430,7 +683,22 @@ export function UseCaseFlow({ useCase }: { useCase: AgentUseCase }) {
   );
 }
 
-/** The measured figures from the run, and whether it escalated. */
+/**
+ * The measured figures from the run, and whether it escalated.
+ *
+ * These four numbers are the most credible objects on an agent page, because
+ * they are the only ones that were produced rather than written: everything
+ * else on the page is a declaration from the catalog, and these came out of a
+ * process. So they are printed at metric scale with the provenance attached,
+ * naming the script that generated them and the test that fails if they drift.
+ * A claim that cannot be checked is decoration; naming the check is the
+ * difference.
+ *
+ * THEY DO NOT COUNT UP. An odometer animation on ₹26.00 would put a few dozen
+ * rupee figures on screen that this run never produced, in a panel whose entire
+ * claim is that nothing here was invented. The figures are settled, so they are
+ * drawn settled.
+ */
 export function UseCaseProof({ useCase }: { useCase: AgentUseCase }) {
   const escalated = useCase.verdict.kind === "escalated";
   const status = splitVerdict(useCase.verdict.text);
@@ -442,7 +710,7 @@ export function UseCaseProof({ useCase }: { useCase: AgentUseCase }) {
         {useCase.proof.map((figure) => (
           // column-reverse so the term precedes the value in the DOM, as a
           // definition list requires, while the figure still reads first.
-          <div key={figure.label} className="flex flex-col-reverse gap-1 px-4 py-4">
+          <div key={figure.label} className="flex flex-col-reverse gap-1.5 px-4 py-4 sm:px-5 sm:py-5">
             <dt className="text-[11.5px] leading-snug text-ink-3">{figure.label}</dt>
             <dd className="gv-metric-sm break-words text-brand" data-numeric="">
               {figure.value}
@@ -450,6 +718,19 @@ export function UseCaseProof({ useCase }: { useCase: AgentUseCase }) {
           </div>
         ))}
       </dl>
+
+      <p className="mt-3.5 flex items-start gap-2 text-[11.5px] leading-relaxed text-ink-3">
+        <span aria-hidden="true" className="mt-0.5 shrink-0">
+          <Icon name="file" size={12} />
+        </span>
+        <span>
+          Transcribed from <code className="font-mono text-[11px]">agent-samples.json</code>, which{" "}
+          <code className="font-mono text-[11px]">scripts/generate_agent_samples.py</code> writes by
+          running every agent against the sandbox.{" "}
+          <code className="font-mono text-[11px]">tests/test_usecase_figures.py</code> fails if a
+          figure quoted here stops appearing in that output.
+        </span>
+      </p>
 
       <div
         className={`mt-6 overflow-hidden rounded-[12px] border ${
