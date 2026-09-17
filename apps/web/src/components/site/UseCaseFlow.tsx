@@ -66,6 +66,23 @@ const TONE_TEXT: Record<FlowTone, string> = {
 };
 
 /**
+ * WHICH CSS PROPERTY A TAILWIND TRANSFORM UTILITY ACTUALLY MOVES.
+ *
+ * `translate-y-*`, `scale-*` and `scale-y-*` do not write `transform` in
+ * Tailwind v4; they write the individual `translate` and `scale` properties.
+ * A transition listing `transform` therefore names a property that never
+ * changes, and the movement it was meant to describe happens in one frame
+ * instead — the marker pops in at full size and the spine appears at full
+ * length rather than drawing down toward the next step. Nothing errors and the
+ * class is spelled correctly, so the only way to catch it is to name the
+ * property the utility really sets, which is what these three constants exist
+ * to do.
+ */
+const MOVE_CARD = "transition-[opacity,translate]";
+const MOVE_MARKER = "transition-[opacity,scale]";
+const MOVE_SPINE = "transition-[scale,opacity]";
+
+/**
  * Colour alone is not a signal. Each non-neutral tone also carries a word for
  * a screen reader and a shape for anyone who cannot separate the hues.
  */
@@ -267,7 +284,23 @@ function ToneMark({ tone }: { tone: FlowTone }) {
   return <span className="sr-only"> — {word}</span>;
 }
 
-function CheckDot({ tone = "pass" }: { tone?: FlowTone }) {
+/**
+ * The mark beside a step, and it defaults to saying NOTHING.
+ *
+ * Green, amber and rose are the three colours this product spends on what a run
+ * actually did — it proceeded, a rule flagged risk, it stopped — so a tick
+ * drawn in green is a claim that the step met policy. A large share of the
+ * recorded steps carry no `tone` at all, and deliberately: "Each file routed to
+ * extract or digitise" is a routing step the run made no finding about, sitting
+ * directly under a step that does carry `tone: "pass"`. Defaulting the absent
+ * case to green made those two indistinguishable and put a verdict on a step
+ * the sandbox never returned one for — while `ToneMark`, correctly, stayed
+ * silent, so the colour was making a claim the screen reader was not.
+ *
+ * So the neutral case is a plain dot in the platform's own grey: the step
+ * happened, and that is all this says.
+ */
+function CheckDot({ tone = "plain" }: { tone?: FlowTone }) {
   return (
     <span
       aria-hidden="true"
@@ -276,7 +309,9 @@ function CheckDot({ tone = "pass" }: { tone?: FlowTone }) {
           ? "border-amber-border bg-amber-soft text-amber"
           : tone === "fail"
             ? "border-fail-border bg-fail-soft text-fail"
-            : "border-pass-border bg-pass-soft text-pass"
+            : tone === "pass"
+              ? "border-pass-border bg-pass-soft text-pass"
+              : "border-line-strong bg-surface-2 text-ink-3"
       }`}
     >
       <svg width="11" height="11" viewBox="0 0 12 12" fill="none" focusable="false">
@@ -287,7 +322,7 @@ function CheckDot({ tone = "pass" }: { tone?: FlowTone }) {
             strokeWidth="1.6"
             strokeLinecap="round"
           />
-        ) : (
+        ) : tone === "pass" ? (
           <path
             d="M2.5 6.2 4.9 8.6 9.5 4"
             stroke="currentColor"
@@ -295,6 +330,8 @@ function CheckDot({ tone = "pass" }: { tone?: FlowTone }) {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+        ) : (
+          <circle cx="6" cy="6" r="1.9" fill="currentColor" />
         )}
       </svg>
     </span>
@@ -331,7 +368,7 @@ function StageLine({ visible, delay }: { visible: boolean; delay: number }) {
     <>
       <span
         aria-hidden="true"
-        className={`mt-2 w-[2px] flex-1 origin-top rounded-full opacity-85 transition-[transform,opacity] duration-[320ms] ease-gv group-hover:opacity-100 ${
+        className={`mt-2 w-[2px] flex-1 origin-top rounded-full opacity-85 ${MOVE_SPINE} duration-[320ms] ease-gv group-hover:opacity-100 ${
           visible ? "scale-y-100" : "scale-y-0"
         }`}
         style={{
@@ -371,7 +408,7 @@ function StageMarker({
   delay: number;
 }) {
   // The marker is the thing that "lands", so it is the only part that scales.
-  const motion = `transition-[opacity,transform] duration-[280ms] ease-gv ${
+  const motion = `${MOVE_MARKER} duration-[280ms] ease-gv ${
     visible ? "scale-100 opacity-100" : "scale-75 opacity-0"
   }`;
 
@@ -473,11 +510,19 @@ function ActorCard({ node }: { node: Extract<FlowNode, { kind: "actor" }> }) {
 }
 
 function EventCard({ node }: { node: Extract<FlowNode, { kind: "event" }> }) {
-  const tone = node.tone ?? "pass";
+  // Absent means absent — see `CheckDot`. A step the run recorded no finding
+  // about keeps the card's own hairline rather than borrowing an outcome.
+  const tone = node.tone ?? "plain";
   // The left edge carries the tone, so the state of a step is legible from
   // the shape of the card and not only from the colour of its tick.
   const edge =
-    tone === "amber" ? "border-l-amber" : tone === "fail" ? "border-l-fail" : "border-l-pass";
+    tone === "amber"
+      ? "border-l-amber"
+      : tone === "fail"
+        ? "border-l-fail"
+        : tone === "pass"
+          ? "border-l-pass"
+          : "border-l-brand-200";
   return (
     <div
       className={`flex gap-2.5 rounded-[10px] border border-brand-200 border-l-[3px] bg-surface px-3.5 py-3 shadow-resting transition-shadow duration-200 ease-gv group-hover:shadow-raised ${edge}`}
@@ -486,7 +531,11 @@ function EventCard({ node }: { node: Extract<FlowNode, { kind: "event" }> }) {
       <span className="min-w-0">
         <span className="block text-[13px] leading-snug text-ink">
           {node.label}
-          {node.tone ? <ToneMark tone={node.tone} /> : null}
+          {/* Read off the resolved tone rather than the raw field, so the word a
+              screen reader hears and the colour a reader sees can never come
+              from two different answers. `plain` has no word, which is the
+              point. */}
+          <ToneMark tone={tone} />
         </span>
         {node.detail ? (
           <span className="mt-1 block text-[12px] leading-snug break-words text-ink-3" data-numeric="">
@@ -655,7 +704,7 @@ export function UseCaseFlow({ useCase }: { useCase: AgentUseCase }) {
                   </div>
 
                   <div
-                    className={`min-w-0 transition-[opacity,transform] duration-[360ms] ease-gv ${
+                    className={`min-w-0 ${MOVE_CARD} duration-[360ms] ease-gv ${
                       isLast ? "" : "pb-6"
                     } ${visible ? "translate-y-0 opacity-100" : "translate-y-1.5 opacity-0"}`}
                     style={{ transitionDelay: `${delay + CARD_OFFSET_MS}ms` }}

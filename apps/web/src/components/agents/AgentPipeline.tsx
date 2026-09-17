@@ -778,12 +778,27 @@ export function AgentPipeline({
     .map((text) => ({ label: shorten(text, 26), full: text }));
   const outputsHidden = Math.max(0, outputKeys.length - outputs.length);
 
-  const models = stages.filter((stage) => stage.model).length;
-  const coded = stages.length - models;
-  const hidden = Math.max(
-    0,
-    (detail.aiServices?.length ?? 0) + (detail.tools?.length ?? 0) - stages.length,
-  );
+  /**
+   * The census counts what the CATALOG DECLARES, not what the rail found room
+   * to draw.
+   *
+   * Those are not the same number. The rail stops at five stages, and because
+   * the AI capabilities are laid down before the tools, an agent with several
+   * of each loses its TOOL stages first — so counting the drawn pills told the
+   * voice collections panel it had "1 code step" when its catalog entry names
+   * five tools, and told the onboarding assistant it had two when it declares
+   * four. Understating how much of an agent is deterministic code is precisely
+   * the claim this panel exists to make correctly, so the chips are counted
+   * from the catalog and the rail's own "and N more steps" line reconciles the
+   * two: the chips total the drawn stages plus that remainder.
+   *
+   * Blank entries are dropped on both sides of the subtraction because
+   * `stagesFor` drops them too. Counting them in only one place would print
+   * "and 1 more step" for an empty string that can never be shown.
+   */
+  const declaredModel = (detail.aiServices ?? []).filter((service) => service.trim()).length;
+  const declaredCode = (detail.tools ?? []).filter((tool) => tool.trim()).length;
+  const hidden = Math.max(0, declaredModel + declaredCode - stages.length);
 
   // A connector is shorter on a narrow card for the same reason the labels are:
   // the constraint is the width of the CARD, not of the window.
@@ -804,13 +819,27 @@ export function AgentPipeline({
   // along with the rest of the subtree — so without this clause the voice
   // collections panel read out five stages and gave no sign that four more
   // existed, which is a more confident claim than the sighted reader gets.
+  //
+  // The escalation clause QUOTES the catalog entry after a colon, for the same
+  // two reasons the visible strip below does. It used to splice the entry into
+  // "On a run where …" with its first letter lowercased, and that fix was made
+  // to the strip and missed here — so the strip read "Hands over to a person
+  // when: Always — a credit decision requires underwriter approval by design"
+  // while a screen reader was told "on a run where always — …", which turns the
+  // one agent that escalates on EVERY run into a conditional. It also names the
+  // remaining conditions by count, because the strip does and a reader who
+  // cannot see the strip must not come away believing there is only one.
   const description =
     `${agent.name} pipeline. Takes ${inputs.length} input${inputs.length === 1 ? "" : "s"}. ` +
     `Then: ${stages.map((s) => `${s.full}${s.model ? " (an AI capability)" : " (deterministic code)"}`).join(", ") || "no declared stages"}. ` +
     (hidden > 0 ? `${hidden} further stage${hidden === 1 ? " is" : "s are"} declared but not drawn. ` : "") +
     `It then returns ${outputKeys.length} output field${outputKeys.length === 1 ? "" : "s"}. ` +
     (escalates
-      ? `On a run where ${detail.escalateWhen[0].charAt(0).toLowerCase()}${detail.escalateWhen[0].slice(1)}, the contract still returns and the decision is handed to a person as well.`
+      ? `It hands over to a person when: ${detail.escalateWhen[0]}` +
+        (detail.escalateWhen.length > 1
+          ? `, and in ${detail.escalateWhen.length - 1} other case${detail.escalateWhen.length > 2 ? "s" : ""}`
+          : "") +
+        ". On such a run the output contract still returns; the decision goes to a person as well."
       : "It does not escalate.");
 
   return (
@@ -888,19 +917,30 @@ export function AgentPipeline({
               claim the picture makes is also written down rather than left to a
               colour a colour-blind reader cannot separate. Only the teal chip
               survives on a narrow card, where the whole header is about the
-              width of the two of them. */}
-          <span
-            className="gv-chip gv-chip-teal"
-            title="Stages where an AI capability does the work, rather than deterministic code"
-          >
-            {models} model {models === 1 ? "step" : "steps"}
-          </span>
-          {compact || coded === 0 ? null : (
+              width of the two of them.
+
+              EACH CHIP IS WITHDRAWN WHEN ITS COUNT IS ZERO, and the teal one
+              needs that as much as the navy one. The Account Aggregator agent
+              declares no AI capabilities at all — it is the one agent in the
+              catalog that is entirely deterministic — and an unguarded teal
+              chip put the words "0 model steps" on its page in the very colour
+              that means a model is reasoning, which is a legend for something
+              the drawing below does not contain. A chip that has to be read as
+              a denial of itself is worse than no chip. */}
+          {declaredModel === 0 ? null : (
+            <span
+              className="gv-chip gv-chip-teal"
+              title="Stages this agent declares where an AI capability does the work, rather than deterministic code"
+            >
+              {declaredModel} model {declaredModel === 1 ? "step" : "steps"}
+            </span>
+          )}
+          {compact || declaredCode === 0 ? null : (
             <span
               className="gv-chip gv-chip-navy"
-              title="Stages where deterministic code reaches a fixed answer"
+              title="Stages this agent declares where deterministic code reaches a fixed answer"
             >
-              {coded} code {coded === 1 ? "step" : "steps"}
+              {declaredCode} code {declaredCode === 1 ? "step" : "steps"}
             </span>
           )}
 
