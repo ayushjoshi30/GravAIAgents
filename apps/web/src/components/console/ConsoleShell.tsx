@@ -15,12 +15,21 @@ import { useConnection } from "@/lib/useResource";
  * palette, the connection and environment chips, and the phone disclosure that
  * carries the same navigation on a narrow screen.
  *
- * The eleven items below are the production information architecture, restored
- * after an intermediate version folded them into six destinations named for
- * intent. The fold read well in isolation but cost the two things this console
- * is for: an auditor who has been told to look at the audit explorer wants to
- * see the words "Audit explorer" in the sidebar, and a link to /console/mcp
- * pasted into a ticket has to land on a page with that name at the top of it.
+ * Eleven of the twelve items below are the production information architecture,
+ * restored after an intermediate version folded them into six destinations named
+ * for intent. The fold read well in isolation but cost the two things this
+ * console is for: an auditor who has been told to look at the audit explorer
+ * wants to see the words "Audit explorer" in the sidebar, and a link to
+ * /console/mcp pasted into a ticket has to land on a page with that name at the
+ * top of it.
+ *
+ * "Your agents" is the twelfth, and it is an addition rather than a
+ * reordering — every restored item is still exactly where it was. It sits
+ * between Agents and Agent Studio because those three read as one run of the
+ * same subject, narrowing: the agents GravAI ships, the agents you built, and
+ * the place you build them. It is the only one of the three that is yours, and
+ * putting it after the builder would have made the builder easier to find than
+ * the things it builds.
  *
  * The route list lives in this file. `lib/nav` used to hold it, describing the
  * sidebar is the only thing that renders it and the six-destination table in
@@ -35,6 +44,9 @@ interface ConsoleNavItem {
 const NAV: ConsoleNavItem[] = [
   { href: "/console", label: "Overview" },
   { href: "/console/agents", label: "Agents" },
+  // The route is /console/workflows because a workflow is what the repo and the
+  // API call this object. The label is what a person calls it.
+  { href: "/console/workflows", label: "Your agents" },
   { href: "/console/studio", label: "Agent Studio" },
   { href: "/console/runs", label: "Runs" },
   { href: "/console/mcp", label: "MCP" },
@@ -50,7 +62,7 @@ const NAV: ConsoleNavItem[] = [
  * Which sidebar item the current route belongs to.
  *
  * Overview is matched exactly because its href is a prefix of every other one,
- * and a prefix test would light it up on all eleven pages. Everything else
+ * and a prefix test would light it up on all twelve pages. Everything else
  * matches its own subtree so that a run detail page keeps Runs marked as the
  * current page.
  */
@@ -123,7 +135,7 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
     // The floor under the whole shell. A document route keeps `100vh`, which is
     // what it has always had: for a page that scrolls anyway the unit only
     // decides how far the white reaches on a short page, and leaving it alone
-    // keeps the other ten routes byte-for-byte what they were.
+    // keeps the other eleven routes byte-for-byte what they were.
     //
     // The Studio cannot keep it. Its main is sized in `dvh`, and on a phone
     // browser `100vh` is the *tallest* the viewport ever gets — taller than
@@ -173,7 +185,7 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
       {/* The sidebar. On a phone it is a disclosure that opens above the page;
           from `md` up it is a column beside the main area, stuck to the top of
           the viewport with the nav list scrolling inside it, so a short window
-          never hides Settings at the bottom of eleven items.
+          never hides Settings at the bottom of twelve items.
 
           Its height is `100dvh` rather than `100vh` for the same reason the
           Studio's main is: on a viewport whose chrome slides in and out — a
@@ -187,7 +199,7 @@ export function ConsoleShell({ children, openCount }: { children: ReactNode; ope
           // THE STUDIO GETS THE WHOLE SCREEN.
           //
           // Every other console route keeps the sidebar, because moving between
-          // eleven destinations is most of what a person does in a console. The
+          // twelve destinations is most of what a person does in a console. The
           // Studio is not that: it is a canvas, and the 252px the nav costs is
           // 252px of workspace on a laptop — about a fifth of the width, or two
           // node cards. Someone in here is building one thing, not navigating.

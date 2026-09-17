@@ -94,7 +94,7 @@ export function SiteFooter() {
             {/* The same ranking the header uses, so the primary path is the
                 same one on the way out of a page as on the way in. */}
             <div className="mt-6 flex flex-wrap gap-2.5">
-              <ButtonLink href="/build" variant="primary" size="sm">
+              <ButtonLink href="/console/workflows" variant="primary" size="sm">
                 Build your own agent
                 <Arrow />
               </ButtonLink>

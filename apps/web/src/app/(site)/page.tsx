@@ -206,7 +206,7 @@ export default function HomePage() {
             </ul>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <ButtonLink href="/build" variant="primary" size="lg">
+              <ButtonLink href="/console/workflows" variant="primary" size="lg">
                 Build your own agent
                 <Arrow />
               </ButtonLink>

@@ -581,13 +581,32 @@ class Workflow(Base, TimestampMixin, TenantScopedMixin):
 
     The name is unique within a tenant because it is an address: the deployed
     agent is invoked by name, and two workflows answering to one name would make
-    that call ambiguous at the worst possible moment.
+    that call ambiguous at the worst possible moment. That constraint stays
+    tenant-wide rather than becoming per-owner even now that workflows have
+    owners, because a call by name carries no owner: narrowing it would let two
+    people in one lender each deploy an agent called "Credit agent" and leave
+    the name resolving to whichever row the query happened to return first.
+    ``POST /workflows/{id}/duplicate`` therefore picks the next free "<name>
+    copy N" instead of relying on a weaker rule to let a second copy through.
     """
 
     __tablename__ = "workflow"
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_workflow_tenant_name"),
         Index("ix_workflow_tenant_updated", "tenant_id", "updated_at"),
+        # The "Your agents" list asks one question on every page load: the
+        # caller's tenant, not deleted, mine or unclaimed, newest edit first.
+        # The columns are in that order on purpose — the two equality-ish
+        # filters first, so each of the two owner values the OR asks for is a
+        # contiguous run of rows already sorted by ``updated_at`` and the page
+        # can be read straight off the index without a sort.
+        Index(
+            "ix_workflow_tenant_live_owner_updated",
+            "tenant_id",
+            "deleted_at",
+            "owner_subject",
+            "updated_at",
+        ),
     )
 
     id: Mapped[UUID] = _uuid_pk()
@@ -599,6 +618,27 @@ class Workflow(Base, TimestampMixin, TenantScopedMixin):
     #: it changes with the node library, so modelling it in tables would mean a
     #: migration every time a node gains a setting.
     definition: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+    #: Who built it: the ``sub`` claim of the token that created it, matching
+    #: ``AppUser.subject``. Ownership is per-user *within* a tenant and is only
+    #: ever applied on top of the tenant filter, never instead of it — a subject
+    #: is unique inside a tenant and nowhere else, so an owner-only filter would
+    #: hand one lender's workflow to an identically named subject at another.
+    #:
+    #: Nullable because the rows that existed before this column did have no
+    #: owner and there is no honest way to invent one. A NULL owner means
+    #: "built before anyone claimed it", and such a row stays visible to its
+    #: whole tenant: hiding somebody's work to tidy a schema is not a migration,
+    #: it is data loss with extra steps.
+    owner_subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    #: When the owner deleted it, or NULL while it is live. A soft delete so the
+    #: undo on the "Your agents" page has something to undo, and so that the
+    #: versions and runs hanging off a workflow survive a mistaken click. The
+    #: router treats a row with this set as absent everywhere — 404 on every
+    #: endpoint, missing from every list — because a delete the user cannot see
+    #: through is the only kind worth offering.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Workflow {self.name}>"

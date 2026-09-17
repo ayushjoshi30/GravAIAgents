@@ -82,6 +82,22 @@ interface RequestOptions {
   anonymous?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * Read the response before its body is turned into a result.
+   *
+   * Some answers are not in the body. `GET /v1/studio/workflows` returns the
+   * plain array its existing callers already read and puts the size of the
+   * whole matching set in `X-Total-Count`, so that adding a count did not have
+   * to move the rows. `ApiResult` carries no headers, so a caller that needs
+   * one is handed the response rather than given a second fetch helper with its
+   * own subtly different failure handling.
+   *
+   * A header is only readable from a browser cross-origin when the API names it
+   * in `Access-Control-Expose-Headers`. `headers.get` answers null when it does
+   * not, and null there means "this browser was not allowed to see it" — which
+   * is not the same as zero and must never be reported as one.
+   */
+  onResponse?: (response: Response) => void;
 }
 
 /**
@@ -137,6 +153,7 @@ export async function request<T>(
     anonymous = false,
     signal,
     timeoutMs = 12_000,
+    onResponse,
   } = options;
 
   if (!anonymous && !token) {
@@ -169,6 +186,10 @@ export async function request<T>(
   } finally {
     clearTimeout(timer);
   }
+
+  // Before the status is judged and before the body is read, because a caller
+  // that needs a header needs it on a 204 and on a failure too.
+  onResponse?.(response);
 
   if (response.status === 204) {
     return { ok: true, data: undefined as T };
@@ -883,6 +904,111 @@ export function uploadDocument(
   });
 }
 
+// --- Agent Studio workflows, as "Your agents" reads them -------------------
+
+/**
+ * These shapes mirror `routers/studio.py` and belong here rather than in
+ * `lib/studio.ts` because the list page is the only caller of the endpoints
+ * below, and because the card is the payload the page, the card component and
+ * the create dialog all have to agree about. One declaration, imported by
+ * three files, is what stops those three from drifting.
+ */
+
+/** One node in a card's small picture of the graph. */
+export interface WorkflowThumbnailNode {
+  id: string;
+  /**
+   * The node type, which is a key into `NODE_BY_TYPE` in `lib/nodeCatalog.ts`.
+   * That lookup carries the node's hue, and it is deliberately the same lookup
+   * the minimap and the canvas use: a node has to be the same colour on a card
+   * as it is on the canvas, or the picture is of a different graph.
+   */
+  type: string;
+  /**
+   * Where the canvas put it, or null.
+   *
+   * Nullable because the API declares it so. A workflow that was never opened
+   * on the canvas — one built from a template, or posted straight to the API —
+   * can carry nodes with no coordinates, and a thumbnail that invented
+   * coordinates for those would draw a shape the workflow does not have.
+   */
+  x: number | null;
+  y: number | null;
+}
+
+/** One connection, as the pair of node ids it joins. */
+export interface WorkflowThumbnailEdge {
+  source: string;
+  target: string;
+}
+
+/**
+ * Enough of a graph to draw its shape, and nothing that could carry a secret.
+ *
+ * Node config never travels in this payload: it is where prompts, mappings and
+ * credential names live, and a page of thirty cards would otherwise ship thirty
+ * whole definitions in order to draw thirty small pictures.
+ */
+export interface WorkflowThumbnail {
+  nodes: WorkflowThumbnailNode[];
+  edges: WorkflowThumbnailEdge[];
+  /**
+   * True when the graph holds more nodes than the thumbnail carries.
+   *
+   * The counts beside the picture are always the true ones, so a card whose
+   * drawing is partial has to say so — otherwise a forty-node agent that the
+   * thumbnail clipped to sixty reads as a small, simple one.
+   */
+  truncated: boolean;
+}
+
+/** One workflow without its graph. */
+export interface WorkflowRow {
+  id: string;
+  name: string;
+  description: string;
+  node_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One workflow as a card on "Your agents" draws it. */
+export interface WorkflowCard extends WorkflowRow {
+  edge_count: number;
+  thumbnail: WorkflowThumbnail;
+}
+
+/**
+ * One page of the list, and how many rows the query matched in total.
+ *
+ * `total` is the size of the whole matching set, never the length of `items`:
+ * a page that counted its own cards would tell someone with sixty agents that
+ * they have twenty-four.
+ *
+ * It is NULLABLE, and the null is the honest part. The endpoint returns a bare
+ * JSON array and carries the count in the `X-Total-Count` header, deliberately,
+ * so that adding a count did not move the rows out from under the studio's own
+ * list. A response header is invisible to a cross-origin browser unless the API
+ * lists it in `Access-Control-Expose-Headers`, which this one does not yet — so
+ * with the console on :3100 and the API on :8000 the count is, from here,
+ * genuinely unknown. Unknown is a different fact from zero and from
+ * `items.length`, and it is the caller's job to say so rather than to pick
+ * whichever number is to hand.
+ */
+export interface WorkflowPage {
+  items: WorkflowCard[];
+  total: number | null;
+}
+
+/** What creating a workflow answers with: the new workflow, graph included. */
+export interface WorkflowCreated extends WorkflowRow {
+  definition: Record<string, unknown>;
+  deployed_version?: string | null;
+}
+
+/** The orderings the list endpoint accepts. Sorting happens server-side. */
+export type WorkflowSort = "last_edited" | "name" | "created";
+
 // --- Methods --------------------------------------------------------------
 
 export const api = {
@@ -1052,6 +1178,151 @@ export const api = {
 
   governor: (token: string | null, signal?: AbortSignal) =>
     request<GovernorStateOut[]>("/v1/usage/governor", { token, signal }),
+
+  // --- "Your agents": the workflows this caller has built -------------------
+  //
+  // Ownership and the soft-delete marker are enforced by the API, not here. A
+  // workflow that is not the caller's answers 404 exactly as one that never
+  // existed does, so there is nothing for the console to check and nothing for
+  // a caller to learn by guessing an id.
+
+  /**
+   * One page of the caller's workflows.
+   *
+   * `q` and `sort` go to the server rather than being applied to the loaded
+   * page, because the list is paginated: a filter written in the browser would
+   * search the twenty-four rows that happen to be loaded and then present that
+   * as the answer, which is wrong in the one case — a long list — where search
+   * is the reason someone reached for it.
+   *
+   * THE SHAPE ON THE WIRE IS AN ARRAY, NOT AN ENVELOPE. `routers/studio.py`
+   * declares `response_model=list[WorkflowCardOut]` and states in its docstring
+   * why: the studio's own list already reads that array, and wrapping the rows
+   * in `{items, total}` to carry a number would have broken every existing
+   * caller of a path that commit promised to keep working. The count travels in
+   * `X-Total-Count` instead. This method assembles the envelope the page wants
+   * out of the two, which is the one place that translation belongs — and it
+   * reports a count it could not read as null rather than inventing one.
+   */
+  listWorkflows: (
+    token: string | null,
+    params: { q?: string; sort?: WorkflowSort; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<ApiResult<WorkflowPage>> => {
+    const query = new URLSearchParams();
+    // An empty or whitespace-only `q` is omitted rather than sent, so that
+    // clearing the box asks for the unfiltered list rather than for the rows
+    // matching "".
+    const q = params.q?.trim();
+    if (q) query.set("q", q);
+    if (params.sort) query.set("sort", params.sort);
+    query.set("limit", String(params.limit ?? 24));
+    query.set("offset", String(params.offset ?? 0));
+
+    let total: number | null = null;
+    return request<WorkflowCard[]>(`/v1/studio/workflows?${query.toString()}`, {
+      token,
+      signal,
+      onResponse: (response) => {
+        const header = response.headers.get("X-Total-Count");
+        if (header === null || !header.trim()) return;
+        const parsed = Number(header);
+        // A header that is not a whole count is not a count. Leaving `total`
+        // null makes the page say so; coercing it would put a number nobody
+        // sent in front of a reader.
+        if (Number.isInteger(parsed) && parsed >= 0) total = parsed;
+      },
+    }).then((result) => {
+      if (!result.ok) return result;
+      if (!Array.isArray(result.data)) {
+        // An API build old enough — or new enough — to answer with something
+        // other than an array is reported as a response this console cannot
+        // read. Without this the page reaches for `.items` on an object that
+        // has none and takes itself down with a TypeError, which is a blank
+        // screen where a failure banner with a status on it belongs.
+        return {
+          ok: false as const,
+          kind: "bad-response" as const,
+          message: "The workflow list did not come back as a list of agents.",
+        };
+      }
+      return { ok: true as const, data: { items: result.data, total } };
+    });
+  },
+
+  /**
+   * Start a new agent, blank or from a named starter.
+   *
+   * `template` is the server's own catalogue key, not a definition assembled
+   * here: the console asking for "kyc" and the API deciding what that contains
+   * is the only arrangement in which a starter cannot go stale in this file.
+   */
+  createWorkflow: (
+    token: string | null,
+    body: { name: string; description?: string; template?: string },
+  ) => request<WorkflowCreated>("/v1/studio/workflows", { token, method: "POST", body }),
+
+  /**
+   * Rename one workflow, and nothing else.
+   *
+   * PATCH with only a name, rather than the studio's PUT, because the list page
+   * holds no definition to send and a rename that posted one would save
+   * whatever the page last happened to know about the graph over whatever the
+   * canvas has since written.
+   *
+   * The server trims the name it is given and refuses one that is already taken
+   * in this tenant, so the name it answers with is the name to display — not
+   * the string that was typed into the field.
+   */
+  renameWorkflow: (token: string | null, id: string, name: string) =>
+    request<WorkflowRow>(`/v1/studio/workflows/${encodeURIComponent(id)}`, {
+      token,
+      method: "PATCH",
+      body: { name },
+    }),
+
+  /**
+   * Copy a workflow. Omit the name and the server picks the next free one,
+   * which it can do and the console cannot: names are unique per tenant and
+   * this page only ever holds one page of them.
+   *
+   * THIS RETURN TYPE OVERSTATES THE PAYLOAD, KNOWINGLY. The endpoint declares
+   * `response_model=WorkflowDetail`, which is the summary plus the definition:
+   * there is no `edge_count` and no `thumbnail` in what comes back, so the copy
+   * cannot be drawn as a card from this answer alone — re-read the list for
+   * that, as `/console/workflows` does. It is still typed `WorkflowCard` here
+   * because `AgentCard`'s `onDuplicated` is declared to take one, and narrowing
+   * this alone would stop that file compiling while somebody else has it open.
+   * Whoever reconciles the two should correct both in one change; until then,
+   * do not reach for `.thumbnail` on this result.
+   */
+  duplicateWorkflow: (token: string | null, id: string, name?: string) =>
+    request<WorkflowCard>(`/v1/studio/workflows/${encodeURIComponent(id)}/duplicate`, {
+      token,
+      method: "POST",
+      // Always a body, even when empty, so the request carries the JSON
+      // content type the endpoint's model expects.
+      body: name ? { name } : {},
+    }),
+
+  /** Soft delete: the row keeps its name and its id, and `restoreWorkflow` undoes it. */
+  deleteWorkflow: (token: string | null, id: string) =>
+    request<void>(`/v1/studio/workflows/${encodeURIComponent(id)}`, { token, method: "DELETE" }),
+
+  /**
+   * The undo. Answers with the row as it now stands, so the list can replace it.
+   *
+   * `WorkflowCreated` rather than `WorkflowCard` because the endpoint returns
+   * `WorkflowDetail`: the summary and the definition, with no `edge_count` and
+   * no thumbnail. What a restore is good for is the name and the timestamps,
+   * and claiming a picture that is not in the payload is how a card ends up
+   * drawing an empty graph for a workflow that has nine nodes.
+   */
+  restoreWorkflow: (token: string | null, id: string) =>
+    request<WorkflowCreated>(`/v1/studio/workflows/${encodeURIComponent(id)}/restore`, {
+      token,
+      method: "POST",
+    }),
 };
 
 export type Api = typeof api;

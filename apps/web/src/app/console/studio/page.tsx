@@ -15,7 +15,15 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { Canvas } from "@/components/studio/Canvas";
 import { ConfigPanel } from "@/components/studio/ConfigPanel";
 import { DeployPanel } from "@/components/studio/DeployPanel";
@@ -50,8 +58,20 @@ const MODES = [
   { value: "deploy", label: "Deploy" },
 ];
 
+/**
+ * Where the Studio goes back to: the signed-in list of agents a person has
+ * built, which is where they came from to get here.
+ *
+ * The route says "workflows" and the link says "Your agents" because both are
+ * this product's own words for the same object — a workflow is what the repo
+ * and the API call it, and "Your agents" is what it is called on screen. The
+ * mismatch is deliberate and neither name is renamed here.
+ */
+const AGENTS_HREF = "/console/workflows";
+
 export default function StudioPage() {
   const [token] = useToken();
+  const router = useRouter();
 
   const [library, setLibrary] = useState<Library | null>(null);
   const [libraryError, setLibraryError] = useState("");
@@ -74,6 +94,27 @@ export default function StudioPage() {
   //: What was last written to the server, so the page can say when the canvas
   //: has moved past it. Runs and validation both use the stored version.
   const [savedJson, setSavedJson] = useState("");
+
+  //: The open workflow, mirrored where an async caller can read it without
+  //: waiting for a render. See `persist` for why that matters.
+  const currentRef = useRef<WorkflowDetail | null>(null);
+  //: The write that is in flight, or null. See `save`.
+  const saving = useRef<Promise<WorkflowDetail | null> | null>(null);
+  //: What the API said about the last write, kept where a caller can read it
+  //: the instant that write resolves. `message` below cannot serve: it is state
+  //: an awaiting caller cannot see until the next render, and it is a running
+  //: commentary that the next run, compile or deploy overwrites — an alert that
+  //: quoted it would sooner or later attribute an unrelated sentence to a save
+  //: that failed ten seconds earlier.
+  const lastWriteMessage = useRef("");
+  //: True while the back link is flushing the canvas before it navigates, so
+  //: the header can say the wait is a save and not a hung link.
+  const [leaving, setLeaving] = useState(false);
+  //: Why the last attempt to leave did not leave. Empty when there was none.
+  //: Kept apart from `message`, which is a running commentary that the next
+  //: action overwrites — this one is a refusal to navigate and has to stay on
+  //: screen until it is dealt with.
+  const [leaveError, setLeaveError] = useState("");
 
   const [inputText, setInputText] = useState("{}");
   const [result, setResult] = useState<RunResult | null>(null);
@@ -268,23 +309,61 @@ export default function StudioPage() {
 
   // --- persistence ------------------------------------------------------
 
-  const save = useCallback(async () => {
+  const persist = useCallback(async () => {
     setBusy("save");
     setMessage("");
-    const outcome = current
-      ? await studio.save(token, current.id, definition)
+    // Read from the ref rather than from `current`, because a write can start
+    // while an earlier one is still in the air — pressing ⌘S and then leaving
+    // does exactly that. React will not have committed the first write's result
+    // yet, so the closure still says there is no record, and a second POST
+    // would put a duplicate workflow beside the one just created. The ref is
+    // written the instant the server answers, which is early enough.
+    const existing = currentRef.current;
+    const outcome = existing
+      ? await studio.save(token, existing.id, definition)
       : await studio.create(token, definition);
+    lastWriteMessage.current = outcome.ok ? "" : outcome.message;
     if (outcome.ok) {
+      currentRef.current = outcome.data;
       setCurrent(outcome.data);
       setSavedJson(JSON.stringify(outcome.data.definition));
       setMessage(`Saved ${outcome.data.name}`);
+      // A successful write of any kind answers the "your work is unsaved"
+      // notice, however it was started. Leaving it up after a manual ⌘S had
+      // gone through would be the notice lying about the state of the world.
+      setLeaveError("");
       void refreshList();
     } else {
       setMessage(outcome.message);
     }
     setBusy("");
     return outcome.ok ? outcome.data : null;
-  }, [current, definition, refreshList, token]);
+  }, [definition, refreshList, token]);
+
+  /**
+   * Write the canvas, and leave the promise somewhere other callers can find it.
+   *
+   * Registering it synchronously is the whole point. Anything that needs the
+   * server to be caught up — the back link, above all — can then wait for the
+   * write that is already running instead of starting a second one, and can
+   * read what that write actually stored rather than guessing.
+   */
+  const save = useCallback((): Promise<WorkflowDetail | null> => {
+    const pending = persist();
+    saving.current = pending;
+    void pending
+      .finally(() => {
+        // Only clear the slot if it is still this write's. A later write will
+        // have replaced it, and clearing it then would hide a live save.
+        if (saving.current === pending) saving.current = null;
+      })
+      // `request` resolves with a failure rather than throwing, so this arm is
+      // for the genuinely unexpected. It exists so the bookkeeping copy of the
+      // promise cannot surface as an unhandled rejection; every caller that
+      // cares still awaits `pending` itself and reports what it gets.
+      .catch(() => {});
+    return pending;
+  }, [persist]);
 
   const open = useCallback(
     async (id: string) => {
@@ -293,6 +372,7 @@ export default function StudioPage() {
         setMessage(outcome.message);
         return;
       }
+      currentRef.current = outcome.data;
       setCurrent(outcome.data);
       setDefinition(outcome.data.definition);
       setSavedJson(JSON.stringify(outcome.data.definition));
@@ -300,6 +380,9 @@ export default function StudioPage() {
       future.current = [];
       setResult(null);
       setSelectedId(null);
+      // The canvas this warning was about has just been replaced, so the
+      // warning is about nothing.
+      setLeaveError("");
     },
     [token],
   );
@@ -368,6 +451,120 @@ export default function StudioPage() {
     [current, open, token],
   );
 
+  // --- leaving ----------------------------------------------------------
+
+  //: Work the canvas holds and the server does not.
+  //:
+  //: Two cases, and they are not the same one. An open workflow is unsaved when
+  //: it has moved past the JSON that came back from its last write. A workflow
+  //: that was never saved has no write to have moved past, so it is compared
+  //: against exactly the canvas this page starts from instead — a new canvas
+  //: arrives with an input and an output node already on it, so "has nodes"
+  //: would call every untouched visit unsaved and, on the way out, write an
+  //: empty record for anyone who opened the Studio and changed their mind.
+  //:
+  //: The baseline keeps `blankWorkflow`'s own default name rather than being
+  //: rebuilt around whatever is currently in the name field. That field is this
+  //: header's editable h1, and typing in it is work like any other; normalising
+  //: the name out of the comparison made naming an agent the one edit the chip
+  //: stayed silent about and the one edit that leaving threw away without a
+  //: word — while typing a description, two inches lower, was saved.
+  //:
+  //: Read once per render because the header states it twice: as the chip, and
+  //: as the thing the back link flushes before it navigates.
+  const unsaved =
+    current !== null
+      ? JSON.stringify(definition) !== savedJson
+      : JSON.stringify(definition) !== JSON.stringify(blankWorkflow());
+
+  /**
+   * Leave for "Your agents", but not before the server has what is on screen.
+   *
+   * Navigating and hoping is what this replaces. A client-side route change
+   * unmounts this page and takes the definition, the undo stack and the test
+   * input with it, so an unsaved canvas at that moment is not delayed — it is
+   * gone. The order here is therefore: wait for any write already in flight,
+   * write whatever the canvas still holds beyond it, and only then move.
+   *
+   * If the write fails, this does not navigate. Saying nothing and leaving
+   * would destroy the work; saying nothing and staying would look like a dead
+   * link. It says which, and leaves the canvas exactly where it was.
+   */
+  const flushAndLeave = useCallback(async () => {
+    // Quote the words the failed write itself came back with, read at the
+    // moment it failed. The alert has to carry the status and correlation id
+    // the API put in them, and it has to be this write's copy and no other.
+    const withDetail = (what: string) =>
+      lastWriteMessage.current ? `${what} The API said: ${lastWriteMessage.current}.` : what;
+
+    // A previous refusal is deliberately NOT cleared here. This function is
+    // what the alert's own "Try again" calls, and tearing the alert down on the
+    // press would destroy the button under the pressing finger — which for
+    // anyone driving this by keyboard means focus dropped to the document and a
+    // Tab sequence restarted from the top. The alert stays, says "Saving…" on
+    // its own button, and is cleared by the write that succeeds.
+
+    // Nothing in flight and nothing to write: this is an ordinary link.
+    if (!saving.current && !unsaved) {
+      router.push(AGENTS_HREF);
+      return;
+    }
+
+    setLeaving(true);
+    try {
+      // What the server holds once the write already running has finished. Its
+      // own answer is used rather than `savedJson`, because that state will not
+      // have been committed by the time this line runs and would send a second,
+      // identical write.
+      let written = savedJson;
+      const inFlight = saving.current;
+      if (inFlight) {
+        const settled = await inFlight;
+        if (!settled) {
+          setLeaveError(withDetail("The save that was already running did not reach the server."));
+          return;
+        }
+        written = JSON.stringify(settled.definition);
+      }
+
+      if (JSON.stringify(definition) !== written) {
+        const saved = await save();
+        if (!saved) {
+          setLeaveError(withDetail("This agent could not be saved."));
+          return;
+        }
+      }
+
+      router.push(AGENTS_HREF);
+    } catch {
+      // `request` reports failures rather than throwing, so reaching here means
+      // something outside the API client broke. The canvas is still intact, and
+      // that is the part worth saying.
+      setLeaveError("Something went wrong while saving.");
+    } finally {
+      setLeaving(false);
+    }
+  }, [definition, router, save, savedJson, unsaved]);
+
+  /**
+   * The back link's click.
+   *
+   * A modified or middle click is handed straight back to the browser: it opens
+   * the list in a new tab and leaves this one, and the canvas in it, alone —
+   * there is nothing to flush because nobody is going anywhere.
+   */
+  const onLeaveClick = useCallback(
+    (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      if (leaving) return;
+      void flushAndLeave();
+    },
+    [flushAndLeave, leaving],
+  );
+
   // --- keyboard ---------------------------------------------------------
 
   useEffect(() => {
@@ -391,9 +588,6 @@ export default function StudioPage() {
 
   const selected = definition.nodes.find((node) => node.id === selectedId) ?? null;
   const selectedSpec = selected ? specs.get(selected.type) : undefined;
-  //: The canvas has moved past what the server holds. Read once per render
-  //: because the header states it twice — as a chip and in the save affordance.
-  const dirty = current !== null && JSON.stringify(definition) !== savedJson;
 
   if (!token) {
     return (
@@ -445,23 +639,53 @@ export default function StudioPage() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* --- header ---------------------------------------------------- */}
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
-        {/* The way out.
-            
+        {/* The two ways out, and why there are two of them.
+
             The Studio is the one console route that hides the sidebar, because
             a canvas wants the 252px more than a person in a canvas wants a nav.
-            That makes this link load-bearing rather than decorative: it is the
-            only exit, and a full-screen route you cannot leave is a trap.
-            
-            It carries the wordmark as well as the word, so the top-left corner
-            still behaves the way the top-left corner of every other console
-            page does — the place you press to get back out. */}
+            That makes whatever sits here load-bearing rather than decorative: a
+            full-screen route you cannot leave is a trap, and this one was one
+            once already.
+
+            "Your agents" is the new link and it does NOT replace the wordmark.
+            They answer two different questions. The wordmark is the corner of
+            every console page — the mark you press when you want out of
+            wherever you are — and deleting it would make this the only route in
+            the console whose top-left corner does not go home. "Your agents" is
+            narrower and more useful: it is the list this agent belongs to and,
+            nearly always, the page you were on a moment ago. Keeping only the
+            wordmark would send someone who came from the list back to the
+            Overview and make them find the list again.
+
+            The chevron moved with the meaning. On the wordmark it read as a
+            vague "back"; on a link that names a destination it says which way
+            back, which is what a chevron is for. */}
         <Link
           href="/console"
           aria-label="Leave the Studio and return to the console"
-          className="-ml-1 flex shrink-0 items-center gap-2 rounded-[6px] px-1.5 py-1 text-ink-3 hover:bg-surface-2 hover:text-ink hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+          className="-ml-1 flex shrink-0 items-center rounded-[6px] px-1.5 py-1 hover:bg-surface-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+        >
+          <GravAIWordmark height={19} />
+        </Link>
+
+        {/* The back link flushes before it navigates, so it is not a plain
+            anchor — but it stays an anchor, so it keeps a real href for the
+            status bar, for ⌘-click, and for anyone driving this page by
+            keyboard. `aria-busy` is how the wait is announced without the
+            accessible name changing underneath a screen reader mid-press. */}
+        <Link
+          href={AGENTS_HREF}
+          onClick={onLeaveClick}
+          aria-busy={leaving || undefined}
+          title={
+            unsaved
+              ? "Save this agent and go back to Your agents"
+              : "Go back to Your agents"
+          }
+          className="flex shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 py-1 text-[13px] font-medium text-ink-3 hover:bg-surface-2 hover:text-ink hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
         >
           <Icon name="chevron" size={13} className="rotate-180" />
-          <GravAIWordmark height={19} />
+          Your agents
         </Link>
 
         <span aria-hidden="true" className="h-5 w-px shrink-0 bg-line" />
@@ -507,7 +731,7 @@ export default function StudioPage() {
           </span>
         ) : null}
 
-        {dirty ? <span className="gv-chip gv-chip-amber">unsaved changes</span> : null}
+        {unsaved ? <span className="gv-chip gv-chip-amber">unsaved changes</span> : null}
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {message ? <span className="text-[12px] text-ink-2">{message}</span> : null}
@@ -532,11 +756,16 @@ export default function StudioPage() {
             size="sm"
             variant="ghost"
             onClick={() => {
+              // The ref has to be cleared with the state it mirrors, or the
+              // next save would PUT this blank canvas over the workflow that
+              // was open a moment ago.
+              currentRef.current = null;
               setCurrent(null);
               setDefinition(blankWorkflow());
               setResult(null);
               setProblems([]);
               setSavedJson("");
+              setLeaveError("");
               history.current = [];
             }}
           >
@@ -586,6 +815,65 @@ export default function StudioPage() {
           </Button>
         </div>
       </header>
+
+      {/* What happened when someone tried to leave.
+
+          A refusal to navigate has to be visible, because from the reader's
+          side a link that did nothing is indistinguishable from a link that is
+          broken — and the difference here is whether their work still exists.
+          It is `role="alert"`, not a line in the header's running `message`,
+          because the next save or run would overwrite that and take the only
+          notice of the failure with it.
+
+          Both ways forward are offered and neither is hidden: try the save
+          again, or go without it and lose the changes. The second is spelled
+          out rather than dressed up, since that is exactly what it does.
+
+          `leaveError` already carries the API's own sentence, captured when the
+          write failed. It is not read out of `message` here: that line is the
+          header's running commentary, and the next run or deploy would replace
+          it while this alert was still up, leaving the alert to introduce an
+          unrelated sentence with "The API said". */}
+      {leaveError ? (
+        <div
+          role="alert"
+          className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-red bg-red-tint px-4 py-2 text-[12.5px] text-red-ink"
+        >
+          <span>
+            {leaveError} Nothing has moved — this canvas is still exactly as you left it, and
+            the changes since your last save exist nowhere else. You can try again, or go
+            without saving and lose them.
+          </span>
+          {/* Busy, not disabled. A disabled button is removed from the tab
+              order the moment it is pressed, which throws a keyboard user's
+              focus back to the document; `aria-busy` says the same thing and
+              leaves the focus where the person put it. The second press is
+              turned away in the handler instead. */}
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-busy={leaving || undefined}
+            onClick={() => {
+              if (leaving) return;
+              void flushAndLeave();
+            }}
+          >
+            {leaving ? "Saving…" : "Try again"}
+          </Button>
+          <Link href={AGENTS_HREF} className="gv-link text-[12.5px] text-red-ink">
+            Leave without saving
+          </Link>
+        </div>
+      ) : leaving ? (
+        // The wait is a save, not a hung link. Said out loud as well as shown,
+        // because the thing that is slow is off screen.
+        <p
+          role="status"
+          className="shrink-0 border-b border-line bg-surface-2 px-4 py-2 text-[12.5px] text-ink-2"
+        >
+          Saving this agent before opening Your agents…
+        </p>
+      ) : null}
 
       {libraryError ? (
         <p className="shrink-0 border-b border-red bg-red-tint px-4 py-2 text-[12.5px] text-red-ink">

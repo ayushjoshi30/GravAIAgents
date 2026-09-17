@@ -371,7 +371,7 @@ export function SiteHeader() {
                           Agent reference
                         </Link>
                         <Link
-                          href="/build"
+                          href="/console/workflows"
                           className="gv-header-arrow inline-flex items-center gap-1.5 rounded text-[12.5px] font-medium text-ink-3 transition-colors duration-150 ease-gv hover:text-brand"
                         >
                           Build your own agent
@@ -507,7 +507,7 @@ export function SiteHeader() {
                 cluster, both full width, so neither is buried on a phone. */}
             <li className="pt-2">
               <Link
-                href="/build"
+                href="/console/workflows"
                 className="gv-btn gv-btn-primary gv-header-arrow flex h-11 w-full items-center justify-center gap-1.5 border text-[14px]"
               >
                 Build your own agent

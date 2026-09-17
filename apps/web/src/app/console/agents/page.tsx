@@ -1059,9 +1059,28 @@ export default function ConsoleAgentsPage() {
            on a middle click, can be copied, and tells the browser where it
            goes. The Studio takes over the whole screen, which is a big enough
            change of context that being able to open it in a second tab and keep
-           the catalog in the first one is worth having. */
+           the catalog in the first one is worth having.
+
+           IT LANDS ON THE LIST, NOT A BLANK CANVAS. Someone signed in has
+           probably built something already, and dropping them into an empty
+           Studio hides it — "let me make one" and "where is the one I made"
+           arrive at the same button, and /console/workflows answers both: it
+           shows what they have, with New agent right there.
+
+           Every "Build your own agent" in the product goes here — this one, the
+           home page, the site header and the footer. One label should mean one
+           destination: a visitor who presses it on the marketing site and again
+           in the console should not arrive somewhere different, and having to
+           learn which copy of a button goes where is the cost of the
+           alternative.
+
+           A visitor with no token therefore lands on this page's no-token
+           state, which tells them what to do and does not pretend they have
+           built nothing. /build is still there as the public sketchpad, reached
+           on its own terms rather than by a button that means something else
+           when you are signed in. */
         <Link
-          href="/console/studio"
+          href="/console/workflows"
           className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[6px] bg-navy px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-navy-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
         >
           <Icon name="bolt" size={14} />
